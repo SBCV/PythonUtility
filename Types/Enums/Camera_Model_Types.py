@@ -1,0 +1,6 @@
+class CameraModelTypes:
+    SIMPLE_PINHOLE = 'SIMPLE_PINHOLE'
+    PINHOLE = 'PINHOLE'
+    SIMPLE_RADIAL = 'SIMPLE_RADIAL'
+
+

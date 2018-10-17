@@ -1,0 +1,3 @@
+class RecToGtTransEstimationMethod:
+    CAMERA_POSES = 'CAMERA_POSES'
+    INTERSECTION_POINTS = 'INTERSECTION_POINTS'
