@@ -2,7 +2,6 @@ __author__ = 'sebastian'
 
 import os
 import subprocess
-import glob
 import platform
 import shutil
 
@@ -99,31 +98,28 @@ class VideoFromImageCreator:
 
     def create_video_from_images(self,
                                  path_to_images,
-                                 path_to_output_video_and_name,
+                                 video_ofp,
+                                 filter_str='',
                                  add_ignore_file=True,
-                                 temp_dir_name='TMP'):
+                                 temp_dir_name='TMP',
+                                 lazy=True):
 
         """
         Creates a video from images using one of two different modes
             pattern_type GLOB
             pattern_type SEQUENTIAL
-        Recommend way is glob, since sequential requires a renaming of the files
-        if they do not start with 0
-        or are not sequential
+        Recommended way is GLOB, since SEQUENTIAL requires a renaming of the files
+        if they do not start with 0 or are not sequential
 
-        :param path_to_images:
-        :param path_to_output_video_and_name:
-        :param use_ffmpeg_sequential:
-        :param sequential_renaming_image_name_scheme: only required if use_ffmpeg_sequential=True
         :return:
         """
 
         logger.info('create_video_from_images:...')
         sequential_renaming_image_name_scheme = 'frame%05d'
 
-        # Windows does not support glob in FFMPEG.
+        # Windows does not support GLOB in FFMPEG.
         # Make a copy of the files, rename them in a sequential way,
-        # create the video and delete them afterwards.
+        # create the video and copied files afterwards.
         need_to_use_temp_files = platform.system() == 'Windows'
         use_ffmpeg_sequential = need_to_use_temp_files
 
@@ -145,20 +141,24 @@ class VideoFromImageCreator:
             sequential_renaming_image_name_scheme_with_ext_and_path = os.path.join(
                 path_to_images, sequential_renaming_image_name_scheme_with_ext)
 
-        logger.info("path_to_output_video_and_name: " + path_to_output_video_and_name)
+        logger.info("path_to_output_video_and_name: " + video_ofp)
 
-        if not os.path.isfile(path_to_output_video_and_name):
+        if not lazy and os.path.isfile(video_ofp):
+            os.remove(video_ofp)
+
+        if not os.path.isfile(video_ofp):
 
             # ffmpeg -framerate 1/5 -i img%03d.png -c:v libx264 -r 30 -pix_fmt yuv420p out.mp4
-
+            #
             # ====== Remark to the Usage of Wild Cards ======
             # https://www.ffmpeg.org/ffmpeg-formats.html
             #   * see pattern_type
             #       * possible values: SEQUENCE, GLOB, GLOB_SEQUENCE (deprecated)
-
+            #
             #       * Use GLOB to handle sequences, which contain GAPS or start with ANOTHER INDEX than 0
             #           * Advantage: No renaming of the files required
-            #           * It is important that the pattern (i.e. ' "*.jpg" ') is in DOUBLE QUOTES!!! (see example below)
+            #           * It is important that the pattern (i.e. ' "*.jpg" ') is in DOUBLE QUOTES!!!
+            #             (see example below)
             #           * It is also possible to use the ** expression for arbitrary subdirectories
             #           * TO SUPPORT WILDCARDS + DOUBLE QUOTES
             #               * one must use a COMMAND string INSTEAD of a LIST
@@ -185,7 +185,7 @@ class VideoFromImageCreator:
                 input_source = ' ' + sequential_renaming_image_name_scheme_with_ext_and_path
             else:
                 options += ' ' + '-pattern_type glob'
-                string_with_wild_card_and_double_quotes = '"' + os.path.join(path_to_images, '*' + ext) + '"'
+                string_with_wild_card_and_double_quotes = '"' + os.path.join(path_to_images, '*' + filter_str + '*' + ext) + '"'
                 input_source = ' ' + string_with_wild_card_and_double_quotes
 
             options += ' ' + '-i'
@@ -199,7 +199,7 @@ class VideoFromImageCreator:
             options += ' ' + '"scale=trunc(iw/2)*2:trunc(ih/2)*2"'
 
             # Call: ffmpeg -i path_to_video -r frame_rate -qscale:v jpg_quality path_to_output_frames_scheme_names
-            call_str = 'ffmpeg' + ' ' + options + ' ' +  path_to_output_video_and_name
+            call_str = 'ffmpeg' + ' ' + options + ' ' + video_ofp
             print(call_str)
 
             # it is crucial to call a command STRING (no list) + and shell=True
@@ -210,7 +210,7 @@ class VideoFromImageCreator:
 
             if add_ignore_file:
                 # Create an ignore file, which avoids that this file is reread by the reconstruction pipeline
-                ignore_file_name = os.path.splitext(path_to_output_video_and_name)[0] + '_ignore.txt'
+                ignore_file_name = os.path.splitext(video_ofp)[0] + '_ignore.txt'
                 if not os.path.isfile(ignore_file_name):
                     os.mknod(ignore_file_name)
 
@@ -222,9 +222,8 @@ class VideoFromImageCreator:
     def process_video_creation_tasks(self, video_creation_tasks):
         for video_creation_task in video_creation_tasks:
             self.create_video_from_images(
-                video_creation_task.path_to_images,
-                video_creation_task.sequential_image_name_scheme,
-                video_creation_task.output_video_path)
+                path_to_images=video_creation_task.path_to_images,
+                video_ofp=video_creation_task.output_video_path)
 
 
 if __name__ == '__main__':
@@ -241,5 +240,5 @@ if __name__ == '__main__':
     video_from_image_creator = VideoFromImageCreator(frame_rate)
     video_from_image_creator.create_video_from_images(
         path_to_images=path_to_images,
-        path_to_output_video_and_name=path_to_output_video_and_name,
+        video_ofp=path_to_output_video_and_name,
         add_ignore_file=add_ignore_file)
