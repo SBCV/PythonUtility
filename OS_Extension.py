@@ -1,11 +1,34 @@
 import os
 
 
+def delete_files_in_dir(idp, ext=None, filter_str=None, sort_result=True, recursive=False):
 
+    """ ext can be a list of extensions or a single extension
+        (e.g. ['.jpg', '.png'] or '.jpg')
+    """
 
-def get_file_paths_in_dir(idp, ext=None, base_name_only=False, without_ext=False, sort_result=True, recursive=False):
+    fps = get_file_paths_in_dir(
+        idp,
+        ext=ext,
+        filter_str=filter_str,
+        sort_result=sort_result,
+        recursive=recursive)
 
-    """ ext can be a list of extensions or a single extension (e.g. ['.jpg', '.png'] or '.jpg')"""
+    for fp in fps:
+        assert os.path.isfile(fp)
+        os.remove(fp)
+
+def get_file_paths_in_dir(idp,
+                          ext=None,
+                          filter_str=None,
+                          base_name_only=False,
+                          without_ext=False,
+                          sort_result=True,
+                          recursive=False):
+
+    """ ext can be a list of extensions or a single extension
+        (e.g. ['.jpg', '.png'] or '.jpg')
+    """
 
     if recursive:
         ifp_s = []
@@ -13,13 +36,16 @@ def get_file_paths_in_dir(idp, ext=None, base_name_only=False, without_ext=False
             ifp_s += [os.path.join(root, ele) for ele in files]
     else:
         ifp_s = [os.path.join(idp, ele) for ele in os.listdir(idp)
-                if os.path.isfile(os.path.join(idp, ele))]
+                 if os.path.isfile(os.path.join(idp, ele))]
 
     if ext is not None:
         if isinstance(ext, list):
             ifp_s = [ifp for ifp in ifp_s if os.path.splitext(ifp)[1].lower() in ext]
         else:
             ifp_s = [ifp for ifp in ifp_s if os.path.splitext(ifp)[1].lower() == ext]
+
+    if filter_str is not None:
+        ifp_s = [ifp for ifp in ifp_s if filter_str in ifp]
 
     if base_name_only:
         ifp_s = [os.path.basename(ifp) for ifp in ifp_s]
@@ -33,7 +59,11 @@ def get_file_paths_in_dir(idp, ext=None, base_name_only=False, without_ext=False
     return ifp_s
 
 
-def get_image_file_paths_in_dir(idp, base_name_only=False, without_ext=False, sort_result=True, recursive=True):
+def get_image_file_paths_in_dir(idp,
+                                base_name_only=False,
+                                without_ext=False,
+                                sort_result=True,
+                                recursive=True):
     return get_file_paths_in_dir(
         idp,
         ext=['.jpg', '.png'],
