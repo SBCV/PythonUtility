@@ -51,11 +51,9 @@ class TrajectoryFileHandler(object):
             'get_incomplete_frame_names_sorted()',
             camera_object_trajectory.get_incomplete_frame_names_sorted())
 
-
         for frame_name in camera_object_trajectory.get_frame_names_sorted():
 
             logger.vinfo('frame_name', frame_name)
-
 
             # REMARK: DO NOT use os.linesep as it generate an additional empty line using windows
             # The index of the frames in the ground truth file starts with 0
@@ -85,7 +83,6 @@ class TrajectoryFileHandler(object):
                 file_content.append(str(cam.get_baseline()) + '\n')
                 file_content.append(TrajectoryFileHandler._matrix_to_string(
                     cam.get_right_camera().get_4x4_cam_to_world_mat()) + '\n')
-
 
             file_content.append(object_to_world_transformation_name + '\n')
             file_content.append(TrajectoryFileHandler._matrix_to_string(
