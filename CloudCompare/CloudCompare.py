@@ -1,7 +1,9 @@
 import platform
 import subprocess
 import os
-
+import numpy as np
+import uuid
+from shutil import copyfile
 from Utility.Logging_Extension import logger
 from Utility.Config import Config
 
@@ -24,25 +26,21 @@ class CloudCompare:
             CloudCompare Version 2.6.1
             Command line mode is documented on Page 171 (Appendix)
 
-
     There are two modes:
         1. Use static methods for a specific purpose
         2. Use non-static methods to build dynamically (long) point cloud commands.
            The final execution is called using "execute_previous_commands".
-
-    CloudCompare Versions:
-        https://github.com/CloudCompare/CloudCompare/releases
-        https://github.com/CloudCompare/CloudCompare/releases/tag/v2.6.3.1
-            This is a pre-release for systems that don't support Qt 5 or C++x11.
-            The next release (2.7.0) will come out soon but will only compile with Qt 5.4 and later.
     """
 
     SUPPORTED_CLOUD_FILE_FORMATS = ['ASC', 'BIN', 'PLY', 'LAS', 'E57', 'VTK', 'PCD', 'SOI', 'PN', 'PV']
     SUPPORTED_MESH_FILE_FORMATS = ['BIN', 'OBJ', 'PLY', 'STL', 'VTK', 'MA', 'FBX']
 
     parent_dp = os.path.dirname(os.path.realpath(__file__))
-    cloud_compare_config = Config(path_to_config_file=os.path.join(
-        parent_dp, 'config.cfg'))
+    path_to_config = os.path.join(parent_dp, 'CloudCompare.cfg')
+    path_to_config_example = os.path.join(parent_dp, 'CloudCompare_example.cfg')
+    if not os.path.isfile(path_to_config):
+        copyfile(path_to_config_example, path_to_config)
+    cloud_compare_config = Config(path_to_config)
 
     if platform.system() == 'Windows':
         path_to_executable = cloud_compare_config.get_option_value('cloud_compare_path_windows', str)
@@ -83,7 +81,6 @@ class CloudCompare:
 
     def cc_statistical_outlier_removal(self, number_of_neighbors=6, sigma_multiplier=1.0):
         self.cmd_options += ['-SOR', str(number_of_neighbors), str(sigma_multiplier)]
-
 
     def cc_subsampling(self, subsampling_mode='OCTREE', subsampling_parameter=9):
         """
@@ -243,7 +240,52 @@ class CloudCompare:
             lazy=lazy)
 
     @staticmethod
-    def apply_transformation(ifp_model, ifp_transformation, ofp_model, save_point_clouds, save_meshes, lazy=False):
+    def apply_transformation(ifp_model,
+                             transformation_mat,
+                             ofp_model,
+                             save_point_clouds,
+                             save_meshes,
+                             lazy=False):
+
+        if not isinstance(transformation_mat, np.ndarray):
+            logger.vinfo('type(transformation_mat)', type(transformation_mat))
+            assert False
+
+        unique_filename = uuid.uuid4().hex
+        transformation_fp = os.path.join(
+            os.path.dirname(CloudCompare.path_to_executable),
+            unique_filename)
+        np.savetxt(transformation_fp, transformation_mat)
+        CloudCompare.apply_transformation_from_file(
+            ifp_model,
+            transformation_fp,
+            ofp_model,
+            save_point_clouds,
+            save_meshes,
+            lazy)
+        os.remove(transformation_fp)
+        assert not os.path.isfile(transformation_fp)
+
+    @staticmethod
+    def apply_transformation_from_file(ifp_model,
+                                       ifp_transformation,
+                                       ofp_model,
+                                       save_point_clouds,
+                                       save_meshes,
+                                       lazy=False):
+
+        """
+        :param ifp_model:
+        :param ifp_transformation:
+                The transformation is stored in a plain txt file.
+                Spaces separate columns and new lines separate rows.
+                For example, use np.savetxt(some_path, some_mat) to create the desired file.
+        :param ofp_model:
+        :param save_point_clouds:
+        :param save_meshes:
+        :param lazy:
+        :return:
+        """
 
         cloud_compare = CloudCompare()
         # cc_open checks presence of file

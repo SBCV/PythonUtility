@@ -154,7 +154,7 @@ class TrajectoryFileHandler(object):
             cam_left.set_4x4_cam_to_world_mat(camera_matrix_left_world)
 
             baseline_str = content[9]
-            logger.vinfo('baseline_str', baseline_str)
+            #logger.vinfo('baseline_str', baseline_str)
 
             if baseline_str == 'None':
                 baseline = None
@@ -187,8 +187,7 @@ class TrajectoryFileHandler(object):
             object_matrix_world = TrajectoryFileHandler._parse_matrix_4x4(
                 content, start_index=15)
 
-            logger.vinfo('object_matrix_world',
-                         object_matrix_world)
+            # logger.vinfo('object_matrix_world', object_matrix_world)
 
             # TODO THIS IS NOT READY FOR USAGE
             # TODO SCALE IS ATM NOT HANDLED BY THE COORDINATE_FRAME_SYSTEM class

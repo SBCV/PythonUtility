@@ -153,7 +153,7 @@ class TransformationTool(object):
             logger.info('apply_single_transformation_to_model: ...')
             logger.vinfo('output_path_to_transformed_model_file', ofp_model)
 
-        CloudCompare.apply_transformation(
+        CloudCompare.apply_transformation_from_file(
             ifp_model,
             ifp_transformation,
             ofp_model,
