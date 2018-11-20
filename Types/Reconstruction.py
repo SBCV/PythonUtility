@@ -46,7 +46,6 @@ class Reconstruction(FrozenClass):
         rec.reconstruction_file_path = nvm_file_path
         return rec
 
-
     def get_sparse_points_visible_in_camera(self, camera_index):
         return self.get_points_visible_in_camera(camera_index, self.points)
 
@@ -89,6 +88,11 @@ class Reconstruction(FrozenClass):
         cam_idx_to_fn = self.get_camera_index_to_file_name()
         fn_to_cam_idx = {v: k for k, v in cam_idx_to_fn.items()}
         return fn_to_cam_idx
+
+    def get_file_name_to_camera(self):
+        fn_to_cam_idx = self.get_file_name_to_camera_index()
+        fn_to_cam = {fn: self.camera_index_to_camera[cam_idx] for fn, cam_idx in fn_to_cam_idx.items()}
+        return fn_to_cam
 
     def get_cameras_as_list(self):
         return self.camera_index_to_camera.values()

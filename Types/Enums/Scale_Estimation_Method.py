@@ -15,7 +15,14 @@ class ScaleEstimationMethodBase(FrozenClass):
     def get_filter_method(self):
         return self.filter_method
 
-class ScaleEstimationStereoMethod(ScaleEstimationMethodBase):
+class ScaleEstimationStereoMatchingMethod(ScaleEstimationMethodBase):
+    """
+    Does not require the estimation of a scale (dummy method)
+    """
+    def __str__(self):
+        return 'STEREO_MATCHING'
+
+class ScaleEstimationStereoReconstructionMethod(ScaleEstimationMethodBase):
 
     camera_distance_simple_contraint = 'CAMERA_DISTANCE_SIMPLE'
     camera_distance_ranking_constraint = 'CAMERA_DISTANCE_RANKING'
@@ -26,13 +33,13 @@ class ScaleEstimationStereoMethod(ScaleEstimationMethodBase):
         self.constraint = None
 
     def set_camera_distance_simple_constraint(self):
-        self.constraint = ScaleEstimationStereoMethod.camera_distance_simple_contraint
+        self.constraint = ScaleEstimationStereoReconstructionMethod.camera_distance_simple_contraint
 
     def set_camera_distance_ranking_constraint(self):
-        self.constraint = ScaleEstimationStereoMethod.camera_distance_ranking_constraint
+        self.constraint = ScaleEstimationStereoReconstructionMethod.camera_distance_ranking_constraint
 
     def set_point_cloud_distance_constraint(self):
-        self.constraint = ScaleEstimationStereoMethod.point_cloud_distance_constraint
+        self.constraint = ScaleEstimationStereoReconstructionMethod.point_cloud_distance_constraint
 
     def get_constraint(self):
         return self.constraint
@@ -197,4 +204,5 @@ class ScaleEstimationMethod(FrozenClass):
     CONSTANT_DISTANCE = ScaleEstimationConstantDistanceMethod()
     HEADING = ScaleEstimationHeadingMethod()
     CONSTANT_VELOCITY = ScaleEstimationConstantVelocityMethod()
-    STEREO = ScaleEstimationStereoMethod()
+    STEREO = ScaleEstimationStereoReconstructionMethod()
+    STEREO_MATCHING = ScaleEstimationStereoMatchingMethod()

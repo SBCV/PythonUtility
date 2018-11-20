@@ -1,7 +1,7 @@
 from Utility.Types.Enums.Camera_Model_Types import CameraModelTypes
 from Utility.Classes.Frozen_Class import FrozenClass
 
-class CalibrationParameter(FrozenClass):
+class CalibrationParameter(object):
 
     def assert_float_or_int(self, value):
         assert type(value) == float or type(value) == int
