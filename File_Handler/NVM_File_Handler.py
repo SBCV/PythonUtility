@@ -272,9 +272,9 @@ class NVMFileHandler(object):
             return 'NVM_V3'
 
     @staticmethod
-    def write_nvm_file(output_nvm_file_name, cameras, points):
+    def write_nvm_file(ofp, cameras, points):
 
-        logger.info('Write NVM file: ' + output_nvm_file_name)
+        logger.info('Write NVM file: ' + ofp)
 
         nvm_content = []
         nvm_content.append(NVMFileHandler.nvm_line(
@@ -333,7 +333,7 @@ class NVMFileHandler(object):
         nvm_content.append('#each following number gives a model-index that has PLY' + os.linesep)
         nvm_content.append('0' + os.linesep)
 
-        with open(output_nvm_file_name, 'wb') as output_file:
+        with open(ofp, 'wb') as output_file:
             output_file.writelines([item.encode() for item in nvm_content])
 
         logger.info('Write NVM file: Done')

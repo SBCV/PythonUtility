@@ -1,5 +1,5 @@
 # also pycharm highlights that OpenEXR is not found it is there
-import OpenEXR, Imath, numpy
+import OpenEXR, Imath
 
 from Utility.Logging_Extension import logger
 import matplotlib.pyplot as plt
@@ -28,11 +28,11 @@ class EXRFileHandler(object):
         logger.vinfo('size', size)
 
         red_channel_str = exr_file.channel('R', pt)
-        red_exr_data_as_np = numpy.fromstring(red_channel_str, dtype=numpy.float32)
+        red_exr_data_as_np = np.fromstring(red_channel_str, dtype=np.float32)
         red_exr_data_as_np.shape = (size[1], size[0])  # Numpy arrays are (row, col)
 
         green_channel_str = exr_file.channel('G', pt)
-        green_exr_data_as_np = numpy.fromstring(green_channel_str, dtype=numpy.float32)
+        green_exr_data_as_np = np.fromstring(green_channel_str, dtype=np.float32)
         green_exr_data_as_np.shape = (size[1], size[0])  # Numpy arrays are (row, col)
 
         exr_data_as_np = np.dstack((red_exr_data_as_np, green_exr_data_as_np))
@@ -57,7 +57,7 @@ class EXRFileHandler(object):
         dw = exr_file.header()['dataWindow']
         size = (dw.max.x - dw.min.x + 1, dw.max.y - dw.min.y + 1)
         red_channel_str = exr_file.channel('R', pt)
-        exr_data_as_np = numpy.fromstring(red_channel_str, dtype=numpy.float32)
+        exr_data_as_np = np.fromstring(red_channel_str, dtype=np.float32)
         exr_data_as_np.shape = (size[1], size[0])  # Numpy arrays are (row, col)
         logger.info('parse_depth_exr_file: Done')
         return exr_data_as_np

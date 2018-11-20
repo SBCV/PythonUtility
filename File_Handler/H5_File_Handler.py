@@ -11,12 +11,17 @@ class H5FileHandler(object):
     # ==========================
 
     @staticmethod
-    def read_h5(file_path_and_name, dataset_name='SegmentationResult'):
+    def read_h5(file_path_and_name, dataset_name=None):
 
         # if not os.path.isfile(file_path_and_name):
         #     logger.vinfo('file_path_and_name', file_path_and_name)
         #     assert False
         h5_file_object = h5py.File(file_path_and_name, "r")
+
+        if dataset_name is None:  # Assume there is only one dataset
+            dataset_names = h5_file_object.keys()
+            assert len(dataset_names) == 1
+            dataset_name = dataset_names[0]
 
         segmentation_as_h5_dataset = h5_file_object[dataset_name]
         segmentation_as_matrix = segmentation_as_h5_dataset[()]
@@ -25,13 +30,22 @@ class H5FileHandler(object):
 
 
     @staticmethod
-    def write_h5(file_path_and_name, some_matrix, dataset_name='SegmentationResult'):
+    def write_h5(file_path_and_name, some_matrix, dtype, dataset_name='dataset'):
+
+        """
+        :param file_path_and_name:
+        :param some_matrix:
+        :param dtype: e.g. "i" (used for all segmentations), "f" (used for disparities)
+        :param dataset_name:
+        :return:
+        """
 
         shape = some_matrix.shape
         # print "shape (matrix): " + str(shape)
         h5_segmentation_file = h5py.File(file_path_and_name, "w")
 
-        data_set = h5_segmentation_file.create_dataset(dataset_name, shape, dtype='i', compression="gzip")
+        data_set = h5_segmentation_file.create_dataset(
+            dataset_name, shape, dtype=dtype, compression="gzip")
         # print "shape (data_set): " + str(data_set.shape)
         # print "dtype (data_set): " + str(type(data_set))
         #write to dataset
