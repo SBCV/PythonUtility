@@ -18,6 +18,7 @@ def delete_files_in_dir(idp, ext=None, filter_str=None, sort_result=True, recurs
         assert os.path.isfile(fp)
         os.remove(fp)
 
+
 def get_file_paths_in_dir(idp,
                           ext=None,
                           filter_str=None,
@@ -63,14 +64,29 @@ def get_image_file_paths_in_dir(idp,
                                 base_name_only=False,
                                 without_ext=False,
                                 sort_result=True,
-                                recursive=True):
+                                recursive=True,
+                                filter_str=None):
     return get_file_paths_in_dir(
         idp,
         ext=['.jpg', '.png'],
+        filter_str=filter_str,
         base_name_only=base_name_only,
         without_ext=without_ext,
         sort_result=sort_result,
         recursive=recursive)
+
+
+def get_subdirs(idp,
+                base_name_only=False):
+    sub_dns = [name for name in os.listdir(idp)
+               if os.path.isdir(os.path.join(idp, name))]
+
+    if base_name_only:
+        sub_dps = sub_dns
+    else:
+        sub_dps = [os.path.join(idp, sub_dn) for sub_dn in sub_dns]
+
+    return sub_dps
 
 
 def get_stem(ifp):
