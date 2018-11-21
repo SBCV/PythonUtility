@@ -36,14 +36,14 @@ class TransformationTool(object):
 
 
     @staticmethod
-    def apply_single_transformation_to_multiple_models(input_path_to_transformation_file,
-                                                        input_path_to_model_folder,
-                                                        output_path_to_transformed_model_file_folder,
-                                                        save_clouds=False,
-                                                        save_meshes=False,
-                                                        lazy=True,
-                                                        log_info_sub_methods=True
-                                                        ):
+    def apply_single_transformation_to_multiple_models(transformation_ifp,
+                                                       model_idp,
+                                                       transformed_model_odp,
+                                                       save_clouds=False,
+                                                       save_meshes=False,
+                                                       lazy=True,
+                                                       log_info_sub_methods=True
+                                                       ):
 
         logger.info('apply_single_transformation_to_multiple_models: ...')
         if not (save_clouds ^ save_meshes):
@@ -51,20 +51,20 @@ class TransformationTool(object):
             assert False
 
         model_files = sorted(
-            [model_file for model_file in os.listdir(input_path_to_model_folder)
-             if (os.path.isfile(os.path.join(input_path_to_model_folder, model_file))
+            [model_file for model_file in os.listdir(model_idp)
+             if (os.path.isfile(os.path.join(model_idp, model_file))
                  and os.path.splitext(model_file)[1] == '.ply')])
 
         for model_file in sorted(model_files):
 
             output_path_to_transformed_model_file = os.path.join(
-                output_path_to_transformed_model_file_folder, model_file)
+                transformed_model_odp, model_file)
 
-            input_path_to_model_file = os.path.join(input_path_to_model_folder, model_file)
+            input_path_to_model_file = os.path.join(model_idp, model_file)
 
             TransformationTool.apply_single_transformation_to_single_model(
                 ifp_model=input_path_to_model_file,
-                ifp_transformation=input_path_to_transformation_file,
+                ifp_transformation=transformation_ifp,
                 ofp_model=output_path_to_transformed_model_file,
                 save_point_clouds=save_clouds,
                 save_meshes=save_meshes,

@@ -6,56 +6,59 @@ class TrajectoryEvaluationTask(Task):
     def __init__(self,
                  input_path_to_frames_jpg_folder,
 
-                 ground_truth_transformations_file_path,
-                 trajectory_reconstruction_transformations_file_path,
-                 transformation_reconstruction_to_ground_truth_file_path,
-                 input_ground_truth_environment_mesh_file_path,
+                 scale_estimation_method,
 
-                 input_reconstruction_background_cloud_file_path,
+                 ground_truth_transformations_ifp,
+                 trajectory_reconstruction_transformations_ifp,
+                 reconstruction_to_ground_truth_trans_ofp,
+                 ground_truth_environment_mesh_ifp,
+
+                 reconstruction_background_ply_ifp,
 
                  trajectory_reconstruction_method_specific_name,
-                 output_path_to_object_reconstruction_transformation_files_folder,
+                 trajectory_reconstruction_transformation_odp,
 
                  # Paths for comparing the reconstruction with the corresponding mesh
                  # and to compute the ground truth scale ratio
-                 input_path_to_gt_camera_trajectory_nvm_file,
-                 input_path_to_transformed_object_mesh_files,
-                 input_path_to_object_reconstruction_nvm_file,
-                 input_path_to_background_reconstruction_nvm_file,
+                 gt_camera_trajectory_nvm_ifp,
+                 transformed_object_mesh_idp,
+                 object_reconstruction_nvm_ifp,
+                 background_reconstruction_nvm_ifp,
 
-                 input_reconstruction_object_cloud_file_path,
+                 reconstruction_object_ply_ifp,
 
                  # Paths to compute reconstruction error
-                 output_path_to_transformed_object_ply_files,
-                 output_path_to_transformed_object_ply_files_with_mesh_distance,
+                 trajectory_points_ply_gtc_odp,
+                 trajectory_points_ply_rec_odp,
+                 trajectory_points_ply_with_mesh_distance_odp,
                  reconstruction_to_gt_transformation_estimation_method,
-                 output_path_reconstruction_error_file,
+                 reconstruction_error_ofp,
 
                  # Paths to REFERENCE TRAJECTORY
-                 output_path_to_reference_scale_ratio_file,
-                 output_trajectory_reference_gt_coord_path_folder,
-                 output_trajectory_reference_transformation_file_path,
-                 output_path_to_object_reference_transformation_files_folder,
-                 output_path_to_transformed_object_ply_files_reference,
-                 output_path_to_transformed_object_ply_files_with_mesh_distance_reference,
-                 output_path_reference_error_file,
+                 reference_scale_ratio_ofp,
+                 trajectory_reference_gt_coord_odp,
+                 trajectory_reference_transformation_ofp,
+                 trajectory_reference_transformation_odp,
+                 trajectory_points_ply_reference_odp,
+                 trajectory_points_ply_with_mesh_distance_reference_odp,
+                 reference_error_ofp,
 
                  # Paths for camera trajectory files
-                 input_path_to_camera_trajectory_ply_file,
-                 output_path_to_camera_trajectory_gtc_ply_file,
+                 camera_trajectory_ply_ifp,
+                 camera_trajectory_gtc_ply_ofp,
 
                  # Paths for ground files
-                 input_path_to_ground_ply_file,
-                 output_path_to_ground_gtc_ply_file,
+                 ground_ply_ifp,
+                 ground_gtc_ply_ofp,
 
                  # Path for ground representation files
-                 input_path_to_ground_representation_ply_folder,
-                 output_path_to_ground_representation_gtc_ply_folder,
+                 ground_representation_ply_idp,
+                 ground_representation_gtc_ply_odp,
 
                  # Paths for scale ratio visualization
-                 output_fp_trajectory_reconstruction_estimated_scale_ratio,
-                 output_fp_trajectory_reconstruction_unfiltered_scale_ratios,
-                 output_fp_trajectory_reconstruction_filtered_scale_ratios
+                 trajectory_reconstruction_estimated_scale_ratio_ofp,
+                 trajectory_reconstruction_unfiltered_scale_ratios_ofp,
+                 trajectory_reconstruction_filtered_scale_ratios_ofp
                  ):
 
         self.__dict__.update(locals())

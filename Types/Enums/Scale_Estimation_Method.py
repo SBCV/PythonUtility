@@ -15,6 +15,10 @@ class ScaleEstimationMethodBase(FrozenClass):
     def get_filter_method(self):
         return self.filter_method
 
+class ScaleEstimationReferenceMethod(ScaleEstimationMethodBase):
+    def __str__(self):
+        return 'REFERENCE'
+
 class ScaleEstimationStereoMatchingMethod(ScaleEstimationMethodBase):
     """
     Does not require the estimation of a scale (dummy method)
@@ -22,7 +26,7 @@ class ScaleEstimationStereoMatchingMethod(ScaleEstimationMethodBase):
     def __str__(self):
         return 'STEREO_MATCHING'
 
-class ScaleEstimationStereoReconstructionMethod(ScaleEstimationMethodBase):
+class ScaleEstimationStereoSfMMethod(ScaleEstimationMethodBase):
 
     camera_distance_simple_contraint = 'CAMERA_DISTANCE_SIMPLE'
     camera_distance_ranking_constraint = 'CAMERA_DISTANCE_RANKING'
@@ -33,20 +37,20 @@ class ScaleEstimationStereoReconstructionMethod(ScaleEstimationMethodBase):
         self.constraint = None
 
     def set_camera_distance_simple_constraint(self):
-        self.constraint = ScaleEstimationStereoReconstructionMethod.camera_distance_simple_contraint
+        self.constraint = ScaleEstimationStereoSfMMethod.camera_distance_simple_contraint
 
     def set_camera_distance_ranking_constraint(self):
-        self.constraint = ScaleEstimationStereoReconstructionMethod.camera_distance_ranking_constraint
+        self.constraint = ScaleEstimationStereoSfMMethod.camera_distance_ranking_constraint
 
     def set_point_cloud_distance_constraint(self):
-        self.constraint = ScaleEstimationStereoReconstructionMethod.point_cloud_distance_constraint
+        self.constraint = ScaleEstimationStereoSfMMethod.point_cloud_distance_constraint
 
     def get_constraint(self):
         return self.constraint
 
     def __str__(self):
         assert self.constraint is not None
-        return 'STEREO_' + self.constraint
+        return 'STEREO_SfM_' + self.constraint
 
 class ScaleEstimationConstantVelocityMethod(ScaleEstimationMethodBase):
     def __str__(self):
@@ -199,10 +203,11 @@ class ScaleEstimationHeadingMethod(ScaleEstimationMethodBase):
         return 'HEADING'
 
 class ScaleEstimationMethod(FrozenClass):
+    REFERENCE = ScaleEstimationReferenceMethod()
     MESH_INTERSECTION = ScaleEstimationMeshIntersectionMethod()
     PLANE_INTERSECTION = ScaleEstimationPlaneIntersectionMethod()
     CONSTANT_DISTANCE = ScaleEstimationConstantDistanceMethod()
     HEADING = ScaleEstimationHeadingMethod()
     CONSTANT_VELOCITY = ScaleEstimationConstantVelocityMethod()
-    STEREO = ScaleEstimationStereoReconstructionMethod()
+    STEREO_SFM = ScaleEstimationStereoSfMMethod()
     STEREO_MATCHING = ScaleEstimationStereoMatchingMethod()
