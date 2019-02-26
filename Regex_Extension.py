@@ -45,10 +45,14 @@ class RegexExtension(object):
         return re.compile(self.regex_pattern_str)
 
     def compile_and_match_str(self, input_str):
-        print('input_str', input_str)
-        print('present_strs', self.present_strs)
-        print('absent_strs', self.absent_strs)
-        print('pattern', self.regex_pattern_str)
+        """
+            print('input_str', input_str)
+            print('present_strs', self.present_strs)
+            print('absent_strs', self.absent_strs)
+            print('pattern', self.regex_pattern_str)
+        :param input_str:
+        :return:
+        """
 
         # if not self.last_present_str_consuming:
         #     assert False

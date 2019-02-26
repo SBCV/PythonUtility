@@ -1,19 +1,25 @@
 from Utility.Classes.Frozen_Class import FrozenClass
-
+from Utility.Types.Enums.Outlier_Filter_Type import OutlierFilterType
+from Utility.Types.Enums.Stereo_SfM_Type import StereoSfMType
 
 class ScaleEstimationMethodBase(FrozenClass):
 
     # Options to demonstrate usefulness of semantic and statistical outlier filtering
-    any_filter = 'ANY'
-    all_filters = 'ALL'
-    no_filters = 'NO_FILTERS'
-    semantic_filtering_only = 'SEMANTIC_FILTERING_ONLY'
-    statistical_filterinig_only = 'STATISTICAL_FILTERING_ONLY'
-    
+    any_filter = OutlierFilterType.any_filter           # takes an arbitrary sfm file
+    all_filters = OutlierFilterType.all_filters         # applies only to reconstruction files with all filters applied
+    no_filters = OutlierFilterType.no_filters
+    semantic_filtering_only = OutlierFilterType.semantic_filtering_only
+    statistical_filterinig_only = OutlierFilterType.statistical_filterinig_only
+
     filter_method = any_filter
+
+    stereo_sfm_type = StereoSfMType.initial_stereo_sfm
 
     def get_filter_method(self):
         return self.filter_method
+
+    def get_stereo_sfm_type(self):
+        return self.stereo_sfm_type
 
 class ScaleEstimationReferenceMethod(ScaleEstimationMethodBase):
     def __str__(self):
@@ -32,25 +38,32 @@ class ScaleEstimationStereoSfMMethod(ScaleEstimationMethodBase):
     camera_distance_ranking_constraint = 'CAMERA_DISTANCE_RANKING'
     point_cloud_distance_constraint = 'POINT_CLOUD_DISTANCE'
 
-
     def __init__(self):
-        self.constraint = None
+        self.stereo_sfm_type = StereoSfMType.refined_stereo_sfm
 
-    def set_camera_distance_simple_constraint(self):
-        self.constraint = ScaleEstimationStereoSfMMethod.camera_distance_simple_contraint
+    def use_initial_sfm_rec(self):
+        self.stereo_sfm_type = StereoSfMType.initial_stereo_sfm
 
-    def set_camera_distance_ranking_constraint(self):
-        self.constraint = ScaleEstimationStereoSfMMethod.camera_distance_ranking_constraint
+    def use_refined_sfm_rec(self):
+        self.stereo_sfm_type = StereoSfMType.refined_stereo_sfm
 
-    def set_point_cloud_distance_constraint(self):
-        self.constraint = ScaleEstimationStereoSfMMethod.point_cloud_distance_constraint
-
-    def get_constraint(self):
-        return self.constraint
+    # =========== Legacy Code ===========
+    # def set_camera_distance_simple_constraint(self):
+    #     self.constraint = ScaleEstimationStereoSfMMethod.camera_distance_simple_contraint
+    #
+    # def set_camera_distance_ranking_constraint(self):
+    #     self.constraint = ScaleEstimationStereoSfMMethod.camera_distance_ranking_constraint
+    #
+    # def set_point_cloud_distance_constraint(self):
+    #     self.constraint = ScaleEstimationStereoSfMMethod.point_cloud_distance_constraint
+    #
+    # def get_constraint(self):
+    #     return self.constraint
 
     def __str__(self):
-        assert self.constraint is not None
-        return 'STEREO_SfM_' + self.constraint
+        #assert self.constraint is not None
+        #return 'STEREO_SfM_' + self.constraint
+        return 'STEREO_SfM_' + self.stereo_sfm_type + '_' + self.filter_method
 
 class ScaleEstimationConstantVelocityMethod(ScaleEstimationMethodBase):
     def __str__(self):

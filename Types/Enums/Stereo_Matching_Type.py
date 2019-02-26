@@ -4,3 +4,7 @@ class StereoMatchingType:
     SGBM = 'SGBM'
     # Efficient LArge-Scale Stereo Matching
     ELAS = 'ELAS'
+
+    SPS_Stereo = 'SPSStereo'
+
+    PSMNet = 'PSMNet'

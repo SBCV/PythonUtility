@@ -1,5 +1,5 @@
 import os
-
+import shutil
 
 def delete_files_in_dir(idp, ext=None, filter_str=None, sort_result=True, recursive=False):
 
@@ -75,16 +75,42 @@ def get_image_file_paths_in_dir(idp,
         sort_result=sort_result,
         recursive=recursive)
 
+def delete_subdirs(idp, filter_dp, recursive=False, dry_run=True):
+
+    sub_dirs = get_subdirs(idp, recursive=recursive)
+    sub_dirs_to_delete = []
+    for sub_dir in sub_dirs:
+        if sub_dir.endswith(filter_dp):
+            sub_dirs_to_delete.append(sub_dir)
+
+    if dry_run:
+        print("Dry run! (Files will not be deleted)")
+    else:
+        for dir in sub_dirs_to_delete:
+            shutil.rmtree(dir, ignore_errors=True)
+    print("sub_dirs_to_delete:")
+    print(sub_dirs_to_delete)
+
 
 def get_subdirs(idp,
-                base_name_only=False):
-    sub_dns = [name for name in os.listdir(idp)
-               if os.path.isdir(os.path.join(idp, name))]
+                base_name_only=False,
+                recursive=False):
 
-    if base_name_only:
-        sub_dps = sub_dns
+    if recursive:
+        sub_dps = []
+        if base_name_only:
+            for root, dirs, files in os.walk(idp):
+                sub_dps += [name for name in dirs]
+        else:
+            for root, dirs, files in os.walk(idp):
+                sub_dps += [os.path.join(root, sub_dn) for sub_dn in dirs]
     else:
-        sub_dps = [os.path.join(idp, sub_dn) for sub_dn in sub_dns]
+        sub_dns = [name for name in os.listdir(idp)
+                   if os.path.isdir(os.path.join(idp, name))]
+        if base_name_only:
+            sub_dps = sub_dns
+        else:
+            sub_dps = [os.path.join(idp, sub_dn) for sub_dn in sub_dns]
 
     return sub_dps
 

@@ -55,17 +55,22 @@ class TrajectoryFileHandler(object):
 
             logger.vinfo('frame_name', frame_name)
 
-            # REMARK: DO NOT use os.linesep as it generate an additional empty line using windows
-            # The index of the frames in the ground truth file starts with 0
-            file_content.append(frame_name + '\n')
-            file_content.append(camera_to_world_transformation_name + '\n')
-
             cam = camera_object_trajectory.get_camera(frame_name)
+            #logger.vinfo('cam.is_monocular_cam()', cam.is_monocular_cam())
 
             if cam.is_monocular_cam():
                 left_cam = cam
             else:
                 left_cam = cam.get_left_camera()
+                right_cam = cam.get_right_camera()
+                if left_cam is None or right_cam is None:
+                    logger.info('Left or Right Camera is missing, skipping this frame.')
+                    continue
+
+            # REMARK: DO NOT use os.linesep as it generate an additional empty line using windows
+            # The index of the frames in the ground truth file starts with 0
+            file_content.append(frame_name + '\n')
+            file_content.append(camera_to_world_transformation_name + '\n')
 
             file_content.append(TrajectoryFileHandler._matrix_to_string(
                 left_cam.get_calibration_mat()) + '\n')
@@ -82,7 +87,7 @@ class TrajectoryFileHandler(object):
             else:
                 file_content.append(str(cam.get_baseline()) + '\n')
                 file_content.append(TrajectoryFileHandler._matrix_to_string(
-                    cam.get_right_camera().get_4x4_cam_to_world_mat()) + '\n')
+                    right_cam.get_4x4_cam_to_world_mat()) + '\n')
 
             file_content.append(object_to_world_transformation_name + '\n')
             file_content.append(TrajectoryFileHandler._matrix_to_string(
@@ -140,7 +145,7 @@ class TrajectoryFileHandler(object):
         # if the first camera is actually part of the trajectory
         for content in gt_content_per_frame:
 
-            #logger.info('content: ' + str(content))
+            logger.info('content: ' + str(content))
             image_name = content[0]
 
             camera_calibration_matrix = TrajectoryFileHandler._parse_matrix_3x3(

@@ -35,7 +35,7 @@ class H5FileHandler(object):
         """
         :param file_path_and_name:
         :param some_matrix:
-        :param dtype: e.g. "i" (used for all segmentations), "f" (used for disparities)
+        :param dtype: e.g. dtype="i" (used for all segmentations), dtype="f" (used for disparities)
         :param dataset_name:
         :return:
         """

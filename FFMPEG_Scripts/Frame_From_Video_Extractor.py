@@ -99,37 +99,6 @@ class FrameFromVideoExtractor:
 
         print(ils(indent_level_space) + 'Converting video to images: Done')
 
-    @staticmethod
-    def extract_subpart_video(path_to_input_video,
-                              path_to_output_video,
-                              start_time,
-                              end_time,
-                              indent_level_space=1):
-
-        # ffmpeg -i movie.mp4 -ss 00:00:03 -to 00:00:08 -async 1 cut.mp4
-
-        print(ils(indent_level_space) + 'Converting video to subvideo: ...')
-        print(ils(indent_level_space + 1) + 'Start time: ' + start_time)
-        print(ils(indent_level_space + 1) + 'End time: ' + end_time)
-
-        options = []
-        options += ['-nostdin']
-        #options += ['-loglevel quiet']
-        options += ['-i', path_to_input_video]
-
-        if FrameFromVideoExtractor.is_time_in_number_format(start_time):
-            options += ['-ss', start_time]
-        if FrameFromVideoExtractor.is_time_in_number_format(end_time):
-            options += ['-to', end_time]
-        options += [path_to_output_video]
-
-        options += ['-an']  # remove sound from video
-
-
-        # Call: ffmpeg -i path_to_video -r frame_rate -qscale:v jpg_quality path_to_output_frames_scheme_names
-        subprocess.call(["ffmpeg"] + options)
-        print(ils(indent_level_space) + 'Converting video to subvideo: Done')
-
 
     @staticmethod
     def extract_subpart_video_if_necessary(path_to_input_video,

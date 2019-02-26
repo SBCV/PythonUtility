@@ -229,6 +229,10 @@ class CloudCompare:
     @staticmethod
     def statistical_outlier_removal(ifp, ofp, number_of_neighbors=6, lazy=False):
 
+        # https://www.cloudcompare.org/doc/wiki/index.php?title=SOR_filter
+        # The 'SOR filter' tool resembles a lot the S.O.R. (Statistical Outlier Removal) of the PCL library
+        # http://pointclouds.org/documentation/tutorials/statistical_outlier.php
+
         cloud_compare = CloudCompare()
         # cc_open checks presence of file
         cloud_compare.cc_open(ifp)

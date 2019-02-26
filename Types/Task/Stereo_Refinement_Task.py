@@ -4,6 +4,7 @@ class StereoRefinementTask(Task):
     def __init__(self,
                  sfm_ifp,
                  sfm_ofp,
+                 ply_ofp,
                  calib_u=None,
                  calib_v=None,
                  baseline=None
