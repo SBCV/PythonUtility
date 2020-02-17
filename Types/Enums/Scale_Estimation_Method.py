@@ -15,6 +15,8 @@ class ScaleEstimationMethodBase(FrozenClass):
 
     stereo_sfm_type = StereoSfMType.initial_stereo_sfm
 
+    uses_environment = False
+
     def get_filter_method(self):
         return self.filter_method
 
@@ -43,27 +45,16 @@ class ScaleEstimationStereoSfMMethod(ScaleEstimationMethodBase):
 
     def use_initial_sfm_rec(self):
         self.stereo_sfm_type = StereoSfMType.initial_stereo_sfm
+        #assert False    # TODO
 
     def use_refined_sfm_rec(self):
         self.stereo_sfm_type = StereoSfMType.refined_stereo_sfm
-
-    # =========== Legacy Code ===========
-    # def set_camera_distance_simple_constraint(self):
-    #     self.constraint = ScaleEstimationStereoSfMMethod.camera_distance_simple_contraint
-    #
-    # def set_camera_distance_ranking_constraint(self):
-    #     self.constraint = ScaleEstimationStereoSfMMethod.camera_distance_ranking_constraint
-    #
-    # def set_point_cloud_distance_constraint(self):
-    #     self.constraint = ScaleEstimationStereoSfMMethod.point_cloud_distance_constraint
-    #
-    # def get_constraint(self):
-    #     return self.constraint
+        # assert False  # TODO
 
     def __str__(self):
-        #assert self.constraint is not None
-        #return 'STEREO_SfM_' + self.constraint
-        return 'STEREO_SfM_' + self.stereo_sfm_type + '_' + self.filter_method
+        # TODO REPLACE RETURN STRING
+        # return 'STEREO_SfM_' + self.stereo_sfm_type + '_' + self.filter_method
+        return 'STEREO_SfM'
 
 class ScaleEstimationConstantVelocityMethod(ScaleEstimationMethodBase):
     def __str__(self):
@@ -72,6 +63,7 @@ class ScaleEstimationConstantVelocityMethod(ScaleEstimationMethodBase):
 class ScaleEstimationPlaneIntersectionMethod(ScaleEstimationMethodBase):
 
     semi_dense = False
+    uses_environment = True
 
     def __str__(self):
         return 'PLANE_INTERSECTION_' + 'SEMI_DENSE_' + str(self.semi_dense)
@@ -82,9 +74,14 @@ class ScaleEstimationPlaneIntersectionMethod(ScaleEstimationMethodBase):
 class ScaleEstimationMeshIntersectionMethod(ScaleEstimationMethodBase):
 
     semi_dense = False
+    uses_environment = True
 
     def __str__(self):
+        # Legacy
+        #return 'MESH_INTERSECTION' + '_SEMI_DENSE_' + str(self.semi_dense)
+        # Current
         return 'MESH_INTERSECTION' + '_SEMI_DENSE_' + str(self.semi_dense) + '_FILTER_METHOD_' + str(self.filter_method)
+
 
     def set_semi_dense(self, semi_dense=False):
         self.semi_dense = semi_dense
@@ -102,6 +99,8 @@ class ScaleEstimationMeshIntersectionMethod(ScaleEstimationMethodBase):
         self.filter_method = ScaleEstimationMeshIntersectionMethod.statistical_filterinig_only
 
 class ScaleEstimationConstantDistanceMethod(ScaleEstimationMethodBase):
+
+    uses_environment = True
 
     # Which Image Pairs are considered
     stride = 'STRIDE'
@@ -125,7 +124,7 @@ class ScaleEstimationConstantDistanceMethod(ScaleEstimationMethodBase):
         self.estimation_method = ScaleEstimationConstantDistanceMethod.least_sequares
         self.stride = 1
         self.dist_to_suit_rank_weight = 0.5
-        self.max_num_index_pairs = 20
+        self.max_num_index_pairs = 1000
 
     def get_current_config_as_string(self):
         return self.image_pair_method + "_" + self.filtering_method + "_" + self.estimation_method
@@ -149,10 +148,11 @@ class ScaleEstimationConstantDistanceMethod(ScaleEstimationMethodBase):
         return self.max_num_index_pairs
 
     # Brute Force + No Filtering + Least Squares
-    def set_brute_force_no_filtering_least_squares_config(self):
+    def set_brute_force_no_filtering_least_squares_config(self, max_num_index_pairs=1000):
         self.image_pair_method = ScaleEstimationConstantDistanceMethod.brute_force
         self.filtering_method = ScaleEstimationConstantDistanceMethod.no_filtering
         self.estimation_method = ScaleEstimationConstantDistanceMethod.least_sequares
+        self.max_num_index_pairs = max_num_index_pairs
 
     # Brute Force + Numerator Denominator Filtering + Least Squares
     def set_brute_force_numerator_denominator_filtering_least_squares_config(self):

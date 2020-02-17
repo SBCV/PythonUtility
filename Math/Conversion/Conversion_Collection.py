@@ -1,18 +1,42 @@
 import numpy as np
 import math
+import scipy
+
+from Utility.Math.ext.transforms3d.transforms3d.affines import decompose
+
+def decompose_affine_transformation(trans_mat):
+
+    # See Multiple View Geometry p. 39 and p.42
+
+    # https://github.com/matthew-brett/transforms3d
+    trans, rot, scales, shear = decompose(trans_mat)
+    return trans, rot, scales, shear
+
+def decompose_similarity_transformation(trans_mat):
+
+    # See Multiple View Geometry p. 39 and p.42
+
+    trans = np.transpose(trans_mat)[-1][:-1]
+    scales = extract_axis_scales(trans_mat)
+    # the normalization is important to remove the scaling
+    rot_scale_part = trans_mat[0:-1, 0:-1]
+    rot_scale_part_norm = np.linalg.norm(rot_scale_part)
+    rot_scale_part_normalized = rot_scale_part / rot_scale_part_norm
+    rot = rot_scale_part_normalized
+    return trans, rot, scales
 
 
 def extract_scale(transformation_matrix):
-    s_x, s_y, s_z = extract_axis_scales(
+    scales = extract_axis_scales(
         transformation_matrix)
-    assert np.isclose(s_x, s_y) and np.isclose(s_x, s_z) and np.isclose(s_y, s_z)
-    return s_x
+
+    for scale_1, scale_2 in zip(scales, scales[1:]):
+        assert np.isclose(scale_1, scale_2)
+
+    return scales[0]
 
 
 def extract_axis_scales(transformation_matrix):
-
-    # https://www.gamedev.net/forums/topic/467665-decomposing-rotationtranslationscale-from-matrix/
-    #   see last post
 
     # https://math.stackexchange.com/questions/237369/given-this-transformation-matrix-how-do-i-decompose-it-into-translation-rotati
     #   Rationale behind this approach:
@@ -23,18 +47,73 @@ def extract_axis_scales(transformation_matrix):
     #   Note: This method does not return negative a scale on any axis because
     #         it is not possible to obtain this data from the matrix alone.
 
-    rot_scale_part = transformation_matrix[0:3, 0:3]
+    # https://www.researchgate.net/publication/238189035_General_Formula_for_Extracting_the_Euler_Angles
+    #
+
+    rot_scale_part = transformation_matrix[0:-1, 0:-1]
     rot_scale_part_trans = rot_scale_part.transpose()
 
-    first_column_vec = rot_scale_part_trans[0]
-    second_column_vec = rot_scale_part_trans[1]
-    third_column_vec = rot_scale_part_trans[2]
+    scales = []
+    for column_vec in rot_scale_part_trans:
+        scales.append(np.linalg.norm(column_vec))
 
-    s_x = np.linalg.norm(first_column_vec)
-    s_y = np.linalg.norm(second_column_vec)
-    s_z = np.linalg.norm(third_column_vec)
+    return scales
 
-    return s_x, s_y, s_z
+
+def rotation_matrix_2d_to_angle(rotation_mat, degrees):
+
+    # Use the scipy implementation to deal with ill posed input data
+
+    # Note: A 2D image rotation is equivalent to a ration around the axis orthogonal to the image plane
+    # Thus: The image rotation corresponds to the rotation around the z euler angle
+
+    angles = rotation_matrix_to_euler_angles(rotation_mat, degrees)
+    return angles[2]
+
+
+def rotation_matrix_to_euler_angles(rotation_mat, degrees):
+
+    # Scipy uses the following algorithm to compute euler angles
+    #   https://www.researchgate.net/publication/238189035_General_Formula_for_Extracting_the_Euler_Angles
+
+    assert scipy.__version__ >= '1.2.1'
+    from scipy.spatial.transform import Rotation as R  # requires at least scipy 1.2.1
+
+    if rotation_mat.shape == (3, 3):
+        scipy_rot = R.from_dcm(rotation_mat)
+    elif rotation_mat.shape == (2, 2):
+        rotation_mat_3d = np.identity(3)
+        rotation_mat_3d[:2,:2] = rotation_mat
+        scipy_rot = R.from_dcm(rotation_mat_3d)
+    else:
+        assert False
+
+    return scipy_rot.as_euler('xyz', degrees=degrees)
+
+
+def angle_to_rotation_matrix_2d(theta, in_degree=False):
+    # https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.transform.Rotation.from_euler.html#scipy.spatial.transform.Rotation.from_euler
+    if in_degree:
+        theta = np.radians(theta)
+    cos_theta, sin_theta = np.cos(theta), np.sin(theta)
+    return np.array(((cos_theta, -sin_theta),
+                     (sin_theta, cos_theta)))
+
+
+def angles_to_rotation_matrix_3d(theta, phi, psi, in_degree):
+    # https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.transform.Rotation.from_euler.html#scipy.spatial.transform.Rotation.from_euler
+    if in_degree:
+        theta = np.radians(theta)
+        phi = np.radians(phi)
+        psi = np.radians(psi)
+    cos_theta, sin_theta = np.cos(theta), np.sin(theta)
+    cos_phi, sin_phi = np.cos(phi), np.sin(phi)
+    cos_psi, sin_psi = np.cos(psi), np.sin(psi)
+    return np.array((
+        (cos_phi * cos_psi, cos_psi * sin_theta * sin_phi - cos_theta * sin_psi, cos_theta * cos_psi * sin_phi + sin_theta * sin_psi),
+        (cos_phi * sin_psi, cos_theta * cos_psi + sin_theta * sin_phi * sin_psi, cos_theta * sin_phi * sin_psi - cos_psi * sin_theta),
+        (-sin_phi,          cos_phi * sin_theta,                                 cos_theta * cos_phi)))
+
 
 
 def vector_to_spherical_coords(dir_vec):

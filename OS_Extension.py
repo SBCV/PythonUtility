@@ -1,7 +1,10 @@
 import os
 import shutil
+from functools import reduce
+import re
 
-def delete_files_in_dir(idp, ext=None, filter_str=None, sort_result=True, recursive=False):
+
+def delete_files_in_dir(idp, ext=None, target_str_or_list=None, sort_result=True, recursive=False):
 
     """ ext can be a list of extensions or a single extension
         (e.g. ['.jpg', '.png'] or '.jpg')
@@ -10,7 +13,7 @@ def delete_files_in_dir(idp, ext=None, filter_str=None, sort_result=True, recurs
     fps = get_file_paths_in_dir(
         idp,
         ext=ext,
-        filter_str=filter_str,
+        target_str_or_list=target_str_or_list,
         sort_result=sort_result,
         recursive=recursive)
 
@@ -19,12 +22,19 @@ def delete_files_in_dir(idp, ext=None, filter_str=None, sort_result=True, recurs
         os.remove(fp)
 
 
+def natural_key(some_string):
+    """See http://www.codinghorror.com/blog/archives/001018.html"""
+    return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', some_string)]
+
+
 def get_file_paths_in_dir(idp,
                           ext=None,
-                          filter_str=None,
+                          target_str_or_list=None,
+                          ignore_str_or_list=None,
                           base_name_only=False,
                           without_ext=False,
                           sort_result=True,
+                          natural_sorting=False,
                           recursive=False):
 
     """ ext can be a list of extensions or a single extension
@@ -45,8 +55,17 @@ def get_file_paths_in_dir(idp,
         else:
             ifp_s = [ifp for ifp in ifp_s if os.path.splitext(ifp)[1].lower() == ext]
 
-    if filter_str is not None:
-        ifp_s = [ifp for ifp in ifp_s if filter_str in ifp]
+    if target_str_or_list is not None:
+        if type(target_str_or_list) == str:
+            target_str_or_list = [target_str_or_list]
+        for target_str in target_str_or_list:
+            ifp_s = [ifp for ifp in ifp_s if target_str in os.path.basename(ifp)]
+
+    if ignore_str_or_list is not None:
+        if type(ignore_str_or_list) == str:
+            ignore_str_or_list = [ignore_str_or_list]
+        for ignore_str in ignore_str_or_list:
+            ifp_s = [ifp for ifp in ifp_s if ignore_str not in os.path.basename(ifp)]
 
     if base_name_only:
         ifp_s = [os.path.basename(ifp) for ifp in ifp_s]
@@ -55,7 +74,10 @@ def get_file_paths_in_dir(idp,
         ifp_s = [os.path.splitext(ifp)[0] for ifp in ifp_s]
 
     if sort_result:
-        ifp_s = sorted(ifp_s)
+        if natural_sorting:
+            ifp_s = sorted(ifp_s, key=natural_key)
+        else:
+            ifp_s = sorted(ifp_s)
 
     return ifp_s
 
@@ -65,11 +87,11 @@ def get_image_file_paths_in_dir(idp,
                                 without_ext=False,
                                 sort_result=True,
                                 recursive=True,
-                                filter_str=None):
+                                target_str_or_list=None):
     return get_file_paths_in_dir(
         idp,
         ext=['.jpg', '.png'],
-        filter_str=filter_str,
+        target_str_or_list=target_str_or_list,
         base_name_only=base_name_only,
         without_ext=without_ext,
         sort_result=sort_result,
@@ -115,8 +137,10 @@ def get_subdirs(idp,
     return sub_dps
 
 
-def get_stem(ifp):
-    return os.path.splitext(os.path.basename(ifp))[0]
+def get_stem(ifp, base_name_only=True):
+    if base_name_only:
+        ifp = os.path.basename(ifp)
+    return os.path.splitext(ifp)[0]
 
 
 def get_basename(ifp):
@@ -195,3 +219,7 @@ def is_subdir(possible_parent_dir, possible_sub_dir):
     possible_sub_dir = os.path.realpath(possible_sub_dir)
 
     return possible_sub_dir.startswith(possible_parent_dir + os.sep)
+
+
+def exist_files(file_list):
+    return all(map(os.path.isfile, file_list))

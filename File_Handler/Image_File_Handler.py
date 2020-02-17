@@ -15,6 +15,38 @@ class ImageFileHandler:
         return np.asarray(Image.open(file_path_and_name).convert('L'))
 
     @staticmethod
+    def overlay_images(path_image_1, path_image_2, blend_factor=0.5):
+
+        image_1 = Image.open(path_image_1)
+        image_1 = image_1.convert("RGBA")
+
+        image_2 = Image.open(path_image_2)
+        image_2 = image_2.convert("RGBA")
+
+        overlay = Image.blend(image_1, image_2, blend_factor)
+
+        return overlay
+
+    @staticmethod
+    def create_gif(idp, ofp, duration=100, loop=0):
+
+        # Other tools like https://www.screentogif.com/ achieve better compression results
+
+        img_list = []
+        for fn in os.listdir(idp):
+            ifp = os.path.join(idp, fn)
+            img = Image.open(ifp)
+            img_list.append(img)
+
+        start_img = img_list[0]
+        start_img.save(
+            ofp,
+            save_all=True,
+            append_images=img_list[1:],
+            duration=duration,
+            loop=loop)
+
+    @staticmethod
     def write_image_name_on_image(input_image_path,
                                   output_image_path,
                                   override=False,

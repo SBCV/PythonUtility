@@ -19,7 +19,7 @@ class H5FileHandler(object):
         h5_file_object = h5py.File(file_path_and_name, "r")
 
         if dataset_name is None:  # Assume there is only one dataset
-            dataset_names = h5_file_object.keys()
+            dataset_names = list(h5_file_object.keys())
             assert len(dataset_names) == 1
             dataset_name = dataset_names[0]
 
@@ -35,7 +35,11 @@ class H5FileHandler(object):
         """
         :param file_path_and_name:
         :param some_matrix:
-        :param dtype: e.g. dtype="i" (used for all segmentations), dtype="f" (used for disparities)
+        :param dtype:
+                e.g.
+                    dtype="i"  ==  dtype="int32"    or   dtype="int64"    (used for all segmentations)
+                    dtype="f"  ==  dtype="float32"  or   dtype="float64"   (used for disparities)
+                Creating an array without a dtype results in dtype="float64"
         :param dataset_name:
         :return:
         """

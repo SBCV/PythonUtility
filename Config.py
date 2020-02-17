@@ -111,9 +111,8 @@ class Config(object):
             result = self.get_option_value(option, target_type, section=section)
         else:
             result = default_value
+            #logger.info('result: ' + str(result))
             assert type(result) == target_type
-
-        #logger.info('result: ' + str(result))
 
         return result
 

@@ -27,6 +27,7 @@ class FloFileHandler:
 
     @staticmethod
     def write_flo_visualization_file(flo_ifp, viz_ofp):
+
         flow_data = FloFileHandler.parse_flo_file(flo_ifp)
         bgr_flow_image_1 = OpticalFlowVisualizer.convert_flow_mat_to_opencv_image(flow_data, color_coding='BGR')
         cv2.imwrite(viz_ofp, bgr_flow_image_1)

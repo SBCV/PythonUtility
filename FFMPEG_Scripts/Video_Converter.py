@@ -2,27 +2,43 @@ import subprocess
 import os
 import re
 import sys
-from Utility.Printing import ils
-from Utility.Logging_Extension import logger
-import platform
+import shlex
+import json
 from Utility.FFMPEG_Scripts.FFmpeg import FFmpeg
 
 
 class Unbuffered(object):
    def __init__(self, stream):
        self.stream = stream
+
    def write(self, data):
        self.stream.write(data)
        self.stream.flush()
+
    def writelines(self, datas):
        self.stream.writelines(datas)
        self.stream.flush()
+
    def __getattr__(self, attr):
        return getattr(self.stream, attr)
 
-import sys
 sys.stdout = Unbuffered(sys.stdout)
 sys.stderr = Unbuffered(sys.stderr)
+
+
+# def escape_spaces(some_str):
+#     return some_str.replace(" ", "\\ ")
+#
+# def ensure_quotes(some_str):
+#     starts_with_quote = some_str.startswith("'") or some_str.startswith('"')
+#     ends_with_quote = some_str.endswith("'") or some_str.endswith('"')
+#     if not starts_with_quote and ends_with_quote:
+#         some_str = '"' + some_str
+#         some_str = some_str + '"'
+#     return some_str
+
+def check_path(ifp):
+    assert not " " in ifp
 
 class VideoConverter(object):
 
@@ -77,14 +93,39 @@ class VideoConverter(object):
         return options
 
     @staticmethod
-    def stack_videos_vertically(ifp1, ifp2, ofp, show_progress=False):
+    # function to find the resolution of the input video file
+    def get_video_resolution(ifp):
+        cmd = "ffprobe -v quiet -print_format json -show_streams"
+        args = shlex.split(cmd)
+        args.append(ifp)
+        # run the ffprobe process, decode stdout into utf-8 & convert to JSON
+        ffprobeOutput = subprocess.check_output(args).decode('utf-8')
+        ffprobeOutput = json.loads(ffprobeOutput)
 
+        # find height and width
+        height = ffprobeOutput['streams'][0]['height']
+        width = ffprobeOutput['streams'][0]['width']
+
+        return height, width
+
+    @staticmethod
+    def get_video_height(ifp):
+        return VideoConverter.get_video_resolution(ifp)[0]
+
+    @staticmethod
+    def get_video_width(ifp):
+        return VideoConverter.get_video_resolution(ifp)[1]
+
+    @staticmethod
+    def stack_videos_vertically(ifp_list, ofp, show_progress=False):
+
+        assert isinstance(ifp_list, list)
         # https://stackoverflow.com/questions/11552565/vertically-or-horizontally-stack-several-videos-using-ffmpeg/33764934#33764934
         # Input videos must have the same spatial extent
         options = []
-        options += ['-i', ifp1]
-        options += ['-i', ifp2]
-        options += ['-filter_complex', 'vstack=inputs=2']
+        for ifp in ifp_list:
+            options += ['-i', ifp]
+        options += ['-filter_complex', 'vstack=inputs=' + str(len(ifp_list))]
         options += [ofp]
 
         cmd = [FFmpeg.path_to_executable] + options
@@ -94,38 +135,106 @@ class VideoConverter(object):
         else:
             subprocess.call(cmd)
 
-
-
     @staticmethod
-    def stack_videos_horizontally(ifp1, ifp2, ofp):
+    def stack_videos_horizontally(ifp_list, ofp, lazy=False):
 
-        # https://unix.stackexchange.com/questions/233832/merge-two-video-clips-into-one-placing-them-next-to-each-other
-        # The spatial extent of the second video must be smaller than the first one
+        assert isinstance(ifp_list, list)
+
+        # https://ffmpeg.org/ffmpeg-all.html
+        #   -filter[:stream_specifier] filtergraph (output,per-stream)
+        #       - Create the filtergraph specified by filtergraph and use it to filter the stream.
+        #       - filtergraph is a description of the filtergraph to apply to the stream, and must have a single input
+        #       and a single output of the same type of the stream. In the filtergraph, the input is associated to the
+        #       label in, and the output to the label out. See the ffmpeg-filters manual for more information about the
+        #       filtergraph syntax.
+        #       - See the -filter_complex option if you want to create filtergraphs with multiple inputs and/or outputs.
+        #
+        #   -filter_complex filtergraph (global)
+        #       ... Here [0:v] refers to the first video stream in the first input file
+        #
+        #   Example: unlabeled filtergraph outputs
+        #       The overlay filter requires exactly two video inputs, but none are specified,
+        #       so the first two available video streams are used
+
+        # https://ffmpeg.org/ffmpeg-filters.html
+
         options = []
-        options += ['-i', ifp1]
-        options += ['-i', ifp2]
-        options += ['-filter_complex', '[0:v]pad=iw*2:ih[int];[int][1:v]overlay=W/2:0[vid]']
-        options += ['-map', '[vid]']
+
+        # Find the maximal height of all provided videos
+        max_height_str = str(max([VideoConverter.get_video_height(ifp) for ifp in ifp_list]))
+
+        def get_padded_str(i):
+            return '[padded' + str(i) + ']'
+
+        def get_overlay_str(i):
+            return '[overlay' + str(i) + ']'
+
+        def get_video_stream_str(i):
+            return '[' + str(i) + ':v]'
+
+        filter_complex_str = ''
+
+        for i, ifp in enumerate(ifp_list):
+            options += ['-i', ifp]
+
+        previous_total_width = VideoConverter.get_video_width(ifp_list[0])
+        for i, ifp in enumerate(ifp_list[1:], start=1):
+
+            current_total_width = previous_total_width + VideoConverter.get_video_width(ifp_list[i])
+
+            # padding filter
+            if i == 1:
+                prev_video_input_stream = get_video_stream_str(i-1)
+            else:
+                prev_video_input_stream = get_overlay_str(i-1)
+            prev_padded_stream = get_padded_str(i-1)
+            filter_complex_str += prev_video_input_stream                           # Input stream
+            filter_complex_str += 'pad=' + str(current_total_width) + ':' + max_height_str
+            filter_complex_str += prev_padded_stream                                # Output Stream
+            filter_complex_str += ';'
+
+            # overlay filter
+            current_video_stream = get_video_stream_str(i)
+            current_overlay_stream = get_overlay_str(i)
+            filter_complex_str += prev_padded_stream                                # First input stream
+            filter_complex_str += current_video_stream                              # Second input stream
+            filter_complex_str += 'overlay=' + str(previous_total_width) + ':0'     # Takes two streams as input
+            filter_complex_str += current_overlay_stream                            # Output Stream
+
+            # Append a semi colon except for the last iteration
+            if i != len(ifp_list)-1:
+                filter_complex_str += ';'
+
+            previous_total_width = current_total_width
+
+        options += ['-filter_complex', filter_complex_str]
+        options += ['-map', current_overlay_stream]
         options += ['-c:v', 'libx264']
         options += ['-crf', '23']
         options += ['-preset', 'veryfast']
+        if not lazy:
+            options += ['-y']
         options += [ofp]
-
-        subprocess.call(['ffmpeg'] + options)
-
+        stack_call = ['ffmpeg'] + options
+        print(stack_call)
+        subprocess.call(stack_call)
 
     @staticmethod
-    def extract_subpart_video(path_to_input_video,
-                              path_to_output_video,
-                              start_time,
-                              end_time,
-                              indent_level_space=1):
+    def extract_subpart_video(video_ifp,
+                              video_ofp,
+                              start_time=None,
+                              end_time=None,
+                              start_frame=None,
+                              end_frame=None,
+                              indent_level_space=1,
+                              show_progress=False):
 
-        # ffmpeg -i movie.mp4 -ss 00:00:03 -to 00:00:08 -async 1 cut.mp4
+        print('extract_subpart_video: ...')
+        time_provided = start_time is not None and end_time is not None
+        print(time_provided)
+        frames_provided = start_frame is not None and end_frame is not None
 
-        print(ils(indent_level_space) + 'Converting video to subvideo: ...')
-        print(ils(indent_level_space + 1) + 'Start time: ' + start_time)
-        print(ils(indent_level_space + 1) + 'End time: ' + end_time)
+        assert time_provided != frames_provided
 
         # The order of -i and -ss matters, see:
         #   https://blog.superuser.com/2012/02/24/ffmpeg-the-ultimate-video-and-audio-manipulation-tool/
@@ -133,14 +242,27 @@ class VideoConverter(object):
         options = []
         options += ['-nostdin']
         #options += ['-loglevel quiet']
-        options += ['-i', path_to_input_video]
+        options += ['-i', video_ifp]
 
-        if VideoConverter.is_time_in_number_format(start_time):
+        if time_provided:
+
+            # With time in seconds
+            # ffmpeg -i movie.mp4 -ss 00:00:03 -to 00:00:08 -async 1 cut.mp4
+            assert VideoConverter.is_time_in_number_format(start_time)
+            assert VideoConverter.is_time_in_number_format(end_time)
+            print('Start time: ' + start_time)
+            print('End time: ' + end_time)
             options += ['-ss', start_time]
-        else:
-            assert False
-        if VideoConverter.is_time_in_number_format(end_time):
             options += ['-to', end_time]
+
+        elif frames_provided:
+
+            # https://superuser.com/questions/866144/cutting-videos-at-exact-frames-with-ffmpeg-select-filter
+            #   ffmpeg -i in.mp4 -vf "select=between(n\,start_frame\,end_frame),setpts=PTS-STARTPTS" out.mp4
+
+            options += ['-vf',
+                        '"select=between(n\,' + str(start_frame) + '\,' + str(end_frame) + '),' +
+                        'setpts=PTS-STARTPTS"']
         else:
             assert False
 
@@ -149,14 +271,21 @@ class VideoConverter(object):
         # options += ['-c:v', 'copy']
         # options += ['-c:a', 'copy']
 
-        options += [path_to_output_video]
-
+        options += [video_ofp]
         options += ['-an']  # remove sound from video
 
-
         # Call: ffmpeg -i path_to_video -r frame_rate -qscale:v jpg_quality path_to_output_frames_scheme_names
-        subprocess.call(["ffmpeg"] + options)
-        print(ils(indent_level_space) + 'Converting video to subvideo: Done')
+        call_list = ["ffmpeg"] + options
+
+        call_str = ' '.join(call_list)
+        print('call_str', call_str)
+
+        if show_progress:
+            VideoConverter._run_and_show_progress_in_stderr(call_str, shell=True)
+        else:
+            subprocess.call(call_str, shell=True)
+
+        print('extract_subpart_video: Done')
 
     @staticmethod
     def remove_meta_data_from_video(path_to_input_file, path_to_output_file):
@@ -255,42 +384,16 @@ class VideoConverter(object):
             assert False
 
         call_str = 'ffmpeg' + ' ' + options + ' ' + ofp
-        logger.vinfo('call_str', call_str)
+        print('call_str', call_str)
         subprocess.call(call_str, shell=True)
 
-    @staticmethod
-    def add_frame_numbers_to_video(ifp, ofp):
-        # https://stackoverflow.com/questions/15364861/frame-number-overlay-with-ffmpeg
-        # https://stackoverflow.com/questions/8103808/ffmpeg-drawtext-could-not-load-fontface-from-file
-
-        if platform.system() == 'windows':
-            font_ifp = 'C:\\Windows\\Fonts\\Arial.ttf'
-        else:
-            font_ifp = '/usr/share/fonts/truetype/freefont/FreeMono.ttf'
-
-        # x_pos = 'x=(w-tw)/2'    # center horizontally
-        x_pos = 'x=(w-tw)'        # right border
-        y_pos = 'y=h-(2*lh)'
-
-        options = ''
-        options += ' ' + '-i'
-        options += ' ' + ifp
-        options += ' ' + '-vf'
-        options += ' ' + '"drawtext=fontfile=' + font_ifp + ': text=\'%{frame_num}\': start_number=0: ' + \
-                   x_pos + ': ' + y_pos + ': fontcolor=black: fontsize=20: box=1: boxcolor=white: boxborderw=5"'
-        options += ' ' + '-c:a'
-        options += ' ' + 'copy'
-
-        call_str = 'ffmpeg' + ' ' + options + ' ' + ofp
-        logger.vinfo('call_str', call_str)
-        subprocess.call(call_str, shell=True)
 
     @staticmethod
-    def _run_and_show_progress_in_stderr(cmd_list):
+    def _run_and_show_progress_in_stderr(cmd_list_or_string, shell=False):
 
         # The argument "universal_newlines" is necessary that FFmpeg writes out the progress immediately
         # https://docs.python.org/3/glossary.html#term-universal-newlines
-        sub_process = subprocess.Popen(cmd_list, stderr=subprocess.PIPE, universal_newlines=True)
+        sub_process = subprocess.Popen(cmd_list_or_string, shell=shell, stderr=subprocess.PIPE, universal_newlines=True)
         output_str = ''
         printed_user_question = False
         condition = True

@@ -13,8 +13,6 @@ class ObjectSegmentationTask(Task):
                  categorie_suffix='',
                  instance_suffix='',
                  segmentation_mode=None,
-                 tracking_mode=TrackingMode.FLOW,
-                 matching_type=DenseMatchingMode.CPM,
                  path_to_dense_matches_folder=None):# dense matches may be used for instance segmentation
 
         self.__dict__.update(locals())

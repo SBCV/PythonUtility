@@ -10,7 +10,11 @@ from Utility.Types.Camera_Object_Trajectory import CameraObjectTrajectory
 
 class TrajectoryFileHandler(object):
 
-    gt_lines_per_frame = 19
+    # 11 is for the outdated folder structure (no intrinsics)
+    # 14 monocular
+    # 19 stereo
+
+    gt_lines_per_frame_values = [11, 14, 19]
     CAMERA_POSE = 'camera_pose'
     OBJECT_POSE = 'object_pose'
 
@@ -19,6 +23,41 @@ class TrajectoryFileHandler(object):
         """Yield successive n-sized chunks from l."""
         for i in range(0, len(l), n):
             yield l[i:i + n]
+
+    @staticmethod
+    def compute_gt_lines_per_frame(content_list):
+
+        logger.info('compute_gt_lines_per_frame: ...')
+        # logger.vinfo('content_list', content_list)
+
+        content_list = [x.strip() for x in content_list]
+
+        frame_idx_list = []
+        for idx, content_line in enumerate(content_list):
+            if 'frame' in content_line:
+                # DONT test for  'jpg' in content_line, since that is not true for the legacy data structure
+                frame_idx_list.append(idx)
+        # logger.vinfo('frame_idx_list', frame_idx_list)
+
+        num_lines_per_frame = None
+        for idx in range(len(frame_idx_list))[1:]:
+            gt_lines_per_frame_tmp = frame_idx_list[idx] - frame_idx_list[idx - 1]
+            if num_lines_per_frame is not None:
+                assert num_lines_per_frame == gt_lines_per_frame_tmp
+            num_lines_per_frame = gt_lines_per_frame_tmp
+
+        # logger.vinfo('num_lines_per_frame', num_lines_per_frame)
+        assert num_lines_per_frame is not None
+        if not num_lines_per_frame in TrajectoryFileHandler.gt_lines_per_frame_values:
+            logger.vinfo('num_lines_per_frame', num_lines_per_frame)
+            assert False
+
+        # split content per frame (index)
+        lines_per_frame = list(TrajectoryFileHandler._chunks(
+            content_list, num_lines_per_frame))
+
+        logger.info('compute_gt_lines_per_frame: Done')
+        return lines_per_frame, num_lines_per_frame
 
     @staticmethod
     def _matrix_to_string(some_matrix):
@@ -132,65 +171,70 @@ class TrajectoryFileHandler(object):
         with open(cam_and_obj_trajectory_fp) as gt_file:
             gt_content = gt_file.readlines()
 
-        gt_content = [x.strip() for x in gt_content]
-
-        # split content per frame (index)
-        gt_content_per_frame = list(TrajectoryFileHandler._chunks(
-            gt_content, TrajectoryFileHandler.gt_lines_per_frame))
+        lines_per_frame, num_lines_per_frame = TrajectoryFileHandler.compute_gt_lines_per_frame(gt_content)
 
         camera_object_trajectory = CameraObjectTrajectory()
 
         image_name_to_cam_obj_transf = OrderedDict()
         # we can not use enumerate here, since we do not know
         # if the first camera is actually part of the trajectory
-        for content in gt_content_per_frame:
+        for content in lines_per_frame:
 
             logger.info('content: ' + str(content))
             image_name = content[0]
 
-            camera_calibration_matrix = TrajectoryFileHandler._parse_matrix_3x3(
-                content, start_index=2)
+            cam_left = Camera()
+
+            current_line_idx = 2
+            if num_lines_per_frame > 11:
+                camera_calibration_matrix = TrajectoryFileHandler._parse_matrix_3x3(
+                    content, start_index=current_line_idx)
+                cam_left.set_calibration(camera_calibration_matrix, radial_distortion=0)
+                current_line_idx += 3
 
             camera_matrix_left_world = TrajectoryFileHandler._parse_matrix_4x4(
-                content, start_index=5)
-
-            cam_left = Camera()
-            cam_left.set_calibration(camera_calibration_matrix, radial_distortion=0)
+                content, start_index=current_line_idx)
             cam_left.set_4x4_cam_to_world_mat(camera_matrix_left_world)
+            current_line_idx += 4
 
-            baseline_str = content[9]
-            #logger.vinfo('baseline_str', baseline_str)
+            baseline_or_object_trans_str = content[current_line_idx]        # current_line_idx = 9
+            current_line_idx += 1
+            #logger.vinfo('baseline_or_object_trans_str', baseline_or_object_trans_str)
 
-            if baseline_str == 'None':
-                baseline = None
-            else:
-                baseline = float(baseline_str)
+            # Check for the stereo case (legacy fiel structure handling)
+            if baseline_or_object_trans_str != 'Object to World transformation':
 
-            camera_matrix_right_world = TrajectoryFileHandler._parse_matrix_4x4(
-                content, start_index=10)
+                if baseline_or_object_trans_str == 'None':
+                    baseline = None
+                else:
+                    baseline = float(baseline_or_object_trans_str)
 
-            # Check if stereo camera is defined using the baseline
-            if baseline is not None and baseline > 0:
-                stereo_cam = StereoCamera(cam_left, baseline=baseline)
-                camera_object_trajectory.set_camera(image_name, stereo_cam)
+                camera_matrix_right_world = TrajectoryFileHandler._parse_matrix_4x4(
+                    content, start_index=current_line_idx)
 
-            # Check if the stereo camera is defined using the second transformation matrix
-            elif not np.allclose(camera_matrix_right_world, np.zeros((4,4), dtype=float)):
+                # Check if stereo camera is defined using the baseline
+                if baseline is not None and baseline > 0:
+                    stereo_cam = StereoCamera(cam_left, baseline=baseline)
+                    camera_object_trajectory.set_camera(image_name, stereo_cam)
 
-                cam_right = Camera()
-                cam_right.set_calibration(camera_calibration_matrix, radial_distortion=0)
-                cam_right.set_4x4_cam_to_world_mat(camera_matrix_left_world)
+                # Check if the stereo camera is defined using the second transformation matrix
+                elif not np.allclose(camera_matrix_right_world, np.zeros((4,4), dtype=float)):
 
-                stereo_cam = StereoCamera(left_camera=cam_left, right_camera=cam_right)
-                camera_object_trajectory.set_camera(image_name, stereo_cam)
+                    cam_right = Camera()
+                    cam_right.set_calibration(camera_calibration_matrix, radial_distortion=0)
+                    cam_right.set_4x4_cam_to_world_mat(camera_matrix_left_world)
+
+                    stereo_cam = StereoCamera(left_camera=cam_left, right_camera=cam_right)
+                    camera_object_trajectory.set_camera(image_name, stereo_cam)
+
+                current_line_idx += 5       # 1 line for the stereo baseline + 4 lines for the matrix
 
             else:
                 # if baseline and second matrix is the 0 matrix, we consider the camera as monocular
                 camera_object_trajectory.set_camera(image_name, cam_left)
 
-
             object_matrix_world = TrajectoryFileHandler._parse_matrix_4x4(
-                content, start_index=15)
+                content, start_index=current_line_idx)
 
             # logger.vinfo('object_matrix_world', object_matrix_world)
 
@@ -203,7 +247,6 @@ class TrajectoryFileHandler(object):
             # FIXME Temporary solution
             camera_object_trajectory.set_object_matrix_world(
                 image_name, object_matrix_world)
-
 
         logger.info('parse_camera_and_object_trajectory_file: Done')
 
