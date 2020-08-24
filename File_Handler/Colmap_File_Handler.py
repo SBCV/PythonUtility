@@ -1,96 +1,317 @@
 import os
+import numpy as np
+from Utility.File_Handler.ext.read_write_model import read_model
+from Utility.File_Handler.ext.read_write_model import read_cameras_text
+from Utility.File_Handler.ext.read_write_model import read_cameras_binary
+from Utility.File_Handler.ext.read_write_model import read_images_text
+from Utility.File_Handler.ext.read_write_model import read_images_binary
+from Utility.File_Handler.ext.read_write_model import write_model
+from Utility.File_Handler.ext.read_write_model import write_cameras_text
+from Utility.File_Handler.ext.read_write_model import write_cameras_binary
 
-from Utility.Logging_Extension import logger
+from Utility.File_Handler.ext.read_write_model import Camera as ColmapCamera
+from Utility.File_Handler.ext.read_write_model import Image as ColmapImage
+from Utility.File_Handler.ext.read_write_model import Point3D as ColmapPoint3D
 
-class ColmapFileHandler:
+from Utility.Types.Camera import Camera
+from Utility.Types.Point import Point
+
+
+# From photogrammetry_importer\ext\read_write_model.py
+# CAMERA_MODELS = {
+#     CameraModel(model_id=0, model_name="SIMPLE_PINHOLE", num_params=3),
+#     CameraModel(model_id=1, model_name="PINHOLE", num_params=4),
+#     CameraModel(model_id=2, model_name="SIMPLE_RADIAL", num_params=4),
+#     CameraModel(model_id=3, model_name="RADIAL", num_params=5),
+#     CameraModel(model_id=4, model_name="OPENCV", num_params=8),
+#     CameraModel(model_id=5, model_name="OPENCV_FISHEYE", num_params=8),
+#     CameraModel(model_id=6, model_name="FULL_OPENCV", num_params=12),
+#     CameraModel(model_id=7, model_name="FOV", num_params=5),
+#     CameraModel(model_id=8, model_name="SIMPLE_RADIAL_FISHEYE", num_params=4),
+#     CameraModel(model_id=9, model_name="RADIAL_FISHEYE", num_params=5),
+#     CameraModel(model_id=10, model_name="THIN_PRISM_FISHEYE", num_params=12)
+# }
+
+# From https://github.com/colmap/colmap/blob/dev/src/base/camera_models.h
+#   SIMPLE_PINHOLE: f, cx, cy
+#   PINHOLE: fx, fy, cx, cy
+#   SIMPLE_RADIAL: f, cx, cy, k
+#   RADIAL: f, cx, cy, k1, k2
+#   OPENCV: fx, fy, cx, cy, k1, k2, p1, p2
+#   OPENCV_FISHEYE: fx, fy, cx, cy, k1, k2, k3, k4
+#   FULL_OPENCV: fx, fy, cx, cy, k1, k2, p1, p2, k3, k4, k5, k6
+#   FOV: fx, fy, cx, cy, omega
+#   SIMPLE_RADIAL_FISHEYE: f, cx, cy, k
+#   RADIAL_FISHEYE: f, cx, cy, k1, k2
+#   THIN_PRISM_FISHEYE: fx, fy, cx, cy, k1, k2, p1, p2, k3, k4, sx1, sy1
+
+def parse_camera_param_list(colmap_cam):
+    name = colmap_cam.model
+    params = colmap_cam.params
+    return decompose_params(name, params)
+
+
+def decompose_params(camera_model_name, params):
+    fx, fy, cx, cy, skew = None, None, None, None, None
+    r1, r2 = None, None
+    if camera_model_name == "SIMPLE_PINHOLE":
+        fx, cx, cy = params
+    elif camera_model_name == "PINHOLE":
+        fx, fy, cx, cy = params
+    elif camera_model_name == "SIMPLE_RADIAL":
+        fx, cx, cy, r1 = params
+    elif camera_model_name == "RADIAL":
+        fx, cx, cy, _, _ = params
+    elif camera_model_name == "OPENCV":
+        fx, fy, cx, cy, _, _, _, _ = params
+    elif camera_model_name == "OPENCV_FISHEYE":
+        fx, fy, cx, cy, _, _, _, _ = params
+    elif camera_model_name == "FULL_OPENCV":
+        fx, fy, cx, cy, _, _, _, _, _, _, _, _ = params
+    elif camera_model_name == "FOV":
+        fx, fy, cx, cy, _ = params
+    elif camera_model_name == "SIMPLE_RADIAL_FISHEYE":
+        fx, cx, cy, _ = params
+    elif camera_model_name == "RADIAL_FISHEYE":
+        fx, cx, cy, _, _ = params
+    elif camera_model_name == "THIN_PRISM_FISHEYE":
+        fx, fy, cx, cy, _, _, _, _, _, _, _, _ = params
+    elif camera_model_name == "PERSPECTIVE":
+        fx, fy, cx, cy, skew = params
+    if fy is None:
+        fy = fx
+    if skew is None:
+        skew = 0.0
+    return fx, fy, cx, cy, skew
+
+
+def create_camera_param_list(custom_cam, camera_model_name):
+    calib_mat = custom_cam.get_calibration_mat()
+    return compose_params(camera_model_name, calib_mat)
+
+
+def compose_params(camera_model_name, calib_mat):
+
+    fx = calib_mat[0][0]
+    skew = calib_mat[0][1]
+    cx = calib_mat[0][2]
+
+    fy = calib_mat[1][1]
+    cy = calib_mat[1][2]
+
+    if camera_model_name == "SIMPLE_PINHOLE":
+        assert fx == fy
+        assert skew == 0
+        params = fx, cx, cy
+    elif camera_model_name == "PINHOLE":
+        params = fx, fy, cx, cy
+    elif camera_model_name == "PERSPECTIVE":
+        params = fx, fy, cx, cy, skew
+    else:
+        assert False
+
+    return params
+
+
+class ColmapFileHandler(object):
 
     @staticmethod
-    def write_cameras_txt(camera_path):
-        with open(camera_path, 'wb') as output_file:
-            output_file.writelines(
-                ["# Camera list with one line of data per camera:\n",
-                 "#   CAMERA_ID, MODEL, WIDTH, HEIGHT, PARAMS[]\n",
-                 "# Number of cameras: 1\n",
-                 "1 SIMPLE_RADIAL 2832 2128 2971.75 1416 1064 -0.163881\n"])
+    def convert_colmap_cams_to_cams(id_to_col_cameras, id_to_col_images, image_dp):
+        # From photogrammetry_importer\ext\read_write_model.py
+        #   CameraModel = collections.namedtuple(
+        #       "CameraModel", ["model_id", "model_name", "num_params"])
+        #   Camera = collections.namedtuple(
+        #       "Camera", ["id", "model", "width", "height", "params"])
+        #   BaseImage = collections.namedtuple(
+        #       "Image", ["id", "qvec", "tvec", "camera_id", "name", "xys", "point3D_ids"])
+
+        cameras = []
+        for col_image in id_to_col_images.values():
+            current_camera = Camera()
+            current_camera.id = col_image.id
+            current_camera.set_quaternion(col_image.qvec)
+            current_camera.set_camera_translation_vector_after_rotation(
+                col_image.tvec)
+
+            current_camera.image_dp = image_dp
+            current_camera.file_name = col_image.name
+
+            camera_model = id_to_col_cameras[col_image.camera_id]
+
+            # op.report({'INFO'}, 'image_id: ' + str(col_image.id))
+            # op.report({'INFO'}, 'camera_id: ' + str(col_image.camera_id))
+            # op.report({'INFO'}, 'camera_model: ' + str(camera_model))
+
+            current_camera.width = camera_model.width
+            current_camera.height = camera_model.height
+
+            fx, fy, cx, cy, skew = parse_camera_param_list(camera_model)
+            camera_calibration_matrix = np.array([
+                [fx, skew, cx],
+                [0, fy, cy],
+                [0, 0, 1]])
+            current_camera.set_calibration(
+                camera_calibration_matrix,
+                radial_distortion=0)
+
+            cameras.append(current_camera)
+
+        return cameras
 
     @staticmethod
-    def write_images_txt(image_path, cams, points, number_camera_models):
-        with open(image_path, 'wb') as output_file:
-            output_file.writelines(
-                ["# Image list with two lines of data per image:\n",
-                 "#   IMAGE_ID, QW, QX, QY, QZ, TX, TY, TZ, CAMERA_ID, NAME\n",
-                 "#   POINTS2D[] as (X, Y, POINT3D_ID)\n",
-                 "# Number of images: 11, mean observations per image: 3376.91\n"])
+    def convert_colmap_points_to_points(id_to_col_points3D):
+        # From photogrammetry_importer\ext\read_write_model.py
+        #   Point3D = collections.namedtuple(
+        #       "Point3D", ["id", "xyz", "rgb", "error", "image_ids", "point2D_idxs"])
 
-            for index, cam in enumerate(cams):
+        col_points3D = id_to_col_points3D.values()
+        points3D = []
+        for col_point3D in col_points3D:
+            current_point = Point(
+                coord=col_point3D.xyz,
+                color=col_point3D.rgb)
 
-                index += 1
+            current_point.id = col_point3D.id
+            points3D.append(current_point)
 
-                # https://colmap.github.io/format.html
-                # The reconstructed pose of an image is specified as the projection from world to
-                # image coordinate system using a quaternion (QW, QX, QY, QZ)
-                # and a translation vector (TX, TY, TZ).
-                # The quaternion is defined using the Hamilton convention, which is, for example,
-                # also used by the Eigen library.
-                # The coordinates of the projection center are given by -R^t * T,
-                # where R^t is the inverse/transpose of the 3x3 rotation matrix
-                # composed from the quaternion and T is the translation vector.
-
-                line = ''
-                line += str(index) + ' '
-
-                quaternion_str = ' '.join(map(str, cam.get_quaternion()))
-                line += quaternion_str + ' '
-                camera_translation_str = ' '.join(map(str, cam.get_translation_vec()))
-                line += camera_translation_str + ' '
-
-                line += str(1) + ' '
-                line += str(index) + '.JPG'
-                output_file.write(line + '\n')
-
-                # second data entry
-                line = ''
-                line += "1.0 2.0 -1"    # TODO
-                output_file.write(line + '\n')
-
+        return points3D
 
     @staticmethod
-    def write_points3D_txt(point_path, points):
-        with open(point_path, 'wb') as output_file:
-            output_file.writelines(
-                ["# 3D point list with one line of data per point:\n",
-                 "#   POINT3D_ID, X, Y, Z, R, G, B, ERROR, TRACK[] as (IMAGE_ID, POINT2D_IDX)\n",
-                 "# Number of points: 7867, mean track length: 4.72175\n"])
+    def parse_colmap_model_folder(model_idp, image_idp):
 
-            for index, point in enumerate(points):
-                line = ''
-                if point.id is not None:
-                    line += str(point.id) + ' '
-                else:
-                    line += str(index) + ' '
+        print('Parse Colmap model folder: ' + model_idp)
 
-                line += ' '.join(map(str, point.coord)) + ' '
-                line += ' '.join(map(str, point.color)) + ' '
-                line += '1.0'   # error
-                if point.measurements is not None:
-                    for meas in point.measurements:
-                        line += ' ' + str(meas.camera_index) + ' ' + str(meas.feature_index)
-                output_file.write(line + '\n')
+        ifp_s = os.listdir(model_idp)
 
+        if len(set(ifp_s).intersection(['cameras.txt', 'images.txt', 'points3D.txt'])) == 3:
+            ext = '.txt'
+        elif len(set(ifp_s).intersection(['cameras.bin', 'images.bin', 'points3D.bin'])) == 3:
+            ext = '.bin'
+        else:
+            assert False  # No valid model folder
+
+        # cameras represent information about the camera model
+        # images contain pose information
+        id_to_col_cameras, id_to_col_images, id_to_col_points3D = read_model(
+            model_idp, ext=ext)
+
+        cameras = ColmapFileHandler.convert_colmap_cams_to_cams(
+            id_to_col_cameras, id_to_col_images, image_idp)
+
+        points3D = ColmapFileHandler.convert_colmap_points_to_points(
+            id_to_col_points3D)
+
+        return cameras, points3D
 
     @staticmethod
-    def create_colmap_model_files(model_path, cams, points, number_camera_models):
+    def parse_colmap_cams(model_idp, image_dp):
 
-        os.mkdir(model_path)
+        ifp_s = os.listdir(model_idp)
 
-        logger.info('create_colmap_model_files: ...')
-        camera_path = os.path.join(model_path, 'cameras.txt')
-        ColmapFileHandler.write_cameras_txt(camera_path)
+        if len(set(ifp_s).intersection(['cameras.txt', 'images.txt'])) == 2:
+            ext = '.txt'
+        elif len(set(ifp_s).intersection(['cameras.bin', 'images.bin'])) == 2:
+            ext = '.bin'
+        else:
+            assert False  # No valid model folder
 
-        image_path = os.path.join(model_path, 'images.txt')
-        ColmapFileHandler.write_images_txt(image_path, cams, points, number_camera_models)
+        if ext == ".txt":
+            id_to_col_cameras = read_cameras_text(os.path.join(model_idp, 'cameras' + ext))
+            id_to_col_images = read_images_text(os.path.join(model_idp, 'images' + ext))
 
-        point_path = os.path.join(model_path, 'points3D.txt')
-        ColmapFileHandler.write_points3D_txt(point_path, points)
-        logger.info('create_colmap_model_files: Done')
+        elif ext == ".bin":
+            id_to_col_cameras = read_cameras_binary(os.path.join(model_idp, 'cameras' + ext))
+            id_to_col_images = read_images_binary(os.path.join(model_idp, 'images' + ext))
+        else:
+            assert False
 
+        cameras = ColmapFileHandler.convert_colmap_cams_to_cams(
+            id_to_col_cameras, id_to_col_images, image_dp)
+
+        return cameras
+
+    @staticmethod
+    def convert_cams_to_colmap_cams_and_colmap_images(cameras, colmap_camera_model_name='SIMPLE_PINHOLE'):
+        colmap_cams = {}
+        colmap_images = {}
+        for cam in cameras:
+
+            cam.get_calibration_mat()
+            param_list = create_camera_param_list(
+                cam, colmap_camera_model_name)
+
+            colmap_cam = ColmapCamera(
+                id=cam.id,
+                model=colmap_camera_model_name,
+                width=cam.width,
+                height=cam.height,
+                params=np.asarray(param_list))
+            colmap_cams[cam.id] = colmap_cam
+
+            colmap_image = ColmapImage(
+                id=cam.id,
+                qvec=cam.get_quaternion(),
+                tvec=cam.get_translation_vec(),
+                camera_id=cam.id,
+                name=cam.get_file_name(),
+                xys=[],
+                point3D_ids=[])
+            colmap_images[cam.id] = colmap_image
+
+        return colmap_cams, colmap_images
+
+    @staticmethod
+    def convert_points_to_colmap_points(points):
+        colmap_points3D = {}
+        for point in points:
+            colmap_point = ColmapPoint3D(
+                id=point.id,
+                xyz=point.coord,
+                rgb=point.color,
+                error=0,
+                # The default settings in Colmap show only points with 3+ observations
+                image_ids=[0, 1, 2],
+                point2D_idxs=[0, 1, 2]
+            )
+            colmap_points3D[point.id] = colmap_point
+        return colmap_points3D
+
+    @staticmethod
+    def write_colmap_model(odp, cameras, points, colmap_camera_model_name="SIMPLE_PINHOLE"):
+        print('Write Colmap model folder: ' + odp)
+
+        if not os.path.isdir(odp):
+            os.mkdir(odp)
+
+        # From photogrammetry_importer\ext\read_write_model.py
+        #   CameraModel = collections.namedtuple(
+        #       "CameraModel", ["model_id", "model_name", "num_params"])
+        #   Camera = collections.namedtuple(
+        #       "Camera", ["id", "model", "width", "height", "params"])
+        #   BaseImage = collections.namedtuple(
+        #       "Image", ["id", "qvec", "tvec", "camera_id", "name", "xys", "point3D_ids"])
+        #   Point3D = collections.namedtuple(
+        #       "Point3D", ["id", "xyz", "rgb", "error", "image_ids", "point2D_idxs"])
+
+        colmap_cams, colmap_images = ColmapFileHandler.convert_cams_to_colmap_cams_and_colmap_images(
+            cameras, colmap_camera_model_name)
+
+        colmap_points3D = ColmapFileHandler.convert_points_to_colmap_points(points)
+
+        write_model(
+            colmap_cams,
+            colmap_images,
+            colmap_points3D,
+            odp,
+            ext='.txt')
+
+    @staticmethod
+    def write_colmap_cameras(odp, cameras, colmap_camera_model_name="SIMPLE_PINHOLE", ext=".txt"):
+
+        colmap_cams, _ = ColmapFileHandler.convert_cams_to_colmap_cams_and_colmap_images(
+            cameras, colmap_camera_model_name)
+
+        if ext == ".txt":
+            write_cameras_text(colmap_cams, os.path.join(odp, "cameras" + ext))
+        elif ext == ".bin":
+            write_cameras_binary(colmap_cams, os.path.join(odp, "cameras" + ext))

@@ -137,8 +137,10 @@ class Point(object):
     @classmethod
     def get_points_from_coords(cls, coords):
         points = []
-        for coord in coords:
-            points.append(cls(coord))
+        for id, coord in enumerate(coords):
+            point = cls(coord)
+            point.id = id
+            points.append(point)
         return points
 
     @staticmethod

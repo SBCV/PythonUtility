@@ -5,11 +5,16 @@ import copy
 import numpy as np
 import math
 from Utility.Logging_Extension import logger
-from Utility.Types.Coordinate_Frame_System import CoordinateFrameSystem
+from Utility.Types.Extrinsics import Extrinsics
+from Utility.Types.Intrinsics import Intrinsics
 from Utility.Types.Ray import Ray
 
 
-class Camera(CoordinateFrameSystem):
+class Camera(Extrinsics, Intrinsics):
+
+    DEPTH_MAP_WRT_UNIT_VECTORS = "DEPTH_MAP_WRT_UNIT_VECTORS"
+    DEPTH_MAP_WRT_CANONICAL_VECTORS = "DEPTH_MAP_WRT_CANONICAL_VECTORS"  # Vectors where the last component is 1
+
     def __init__(self, file_name=None, width=None, height=None):
 
         # Coordinate system defines self._quaternion and self.rotation_mat
@@ -20,11 +25,6 @@ class Camera(CoordinateFrameSystem):
         # single color to represent the camera (for example in a ply file)
         self.color = np.array([255, 255, 255], dtype=int)
 
-        # contains focal length and pivot point, but NO distortion parameters
-        self._calibration_mat1 = np.zeros((3, 3), dtype=float)
-        # Only radial distortion with 1 distortion parameter is supported
-        self._radial_distortion = None
-
         self.file_name = file_name
 
         self.width = width
@@ -33,6 +33,10 @@ class Camera(CoordinateFrameSystem):
         # Differentiate between view/image index and reconstruction index
         self.view_index = None          # This is the index w.r.t. to the input images
         self.camera_index = None        # This is the index w.r.t the reconstructed cameras
+
+        self.depth_map_fp = None
+        self.depth_map_callback = None
+        self.depth_map_semantic = None
 
 
     # defines how the class will be printed
@@ -51,75 +55,11 @@ class Camera(CoordinateFrameSystem):
     # def compare_file_name(self, other):
     #     return self.file_name < other.file_name
 
+    def get_file_name(self):
+        return self.file_name
+
     def get_h5_file_name(self):
         return os.path.splitext(self.file_name)[0] + '.h5'
-
-    def set_calibration(self, calibration_mat, radial_distortion):
-
-        self._calibration_mat1 = np.asarray(calibration_mat, dtype=float)
-        self._radial_distortion = float(radial_distortion)
-        assert self._radial_distortion is not None
-
-    def check_calibration_mat(self):
-        assert self.is_principal_point_initialized()
-
-    def get_calibration_mat(self):
-        self.check_calibration_mat()
-        return self._calibration_mat1
-
-    def set_principal_point(self, principal_point):
-        self._calibration_mat1[0][2] = principal_point[0]
-        self._calibration_mat1[1][2] = principal_point[1]
-
-    def get_principal_point(self):
-        calibration_mat = self.get_calibration_mat()
-        cx = calibration_mat[0][2]
-        cy = calibration_mat[1][2]
-        return np.asarray([cx,cy], dtype=float)
-
-    def is_principal_point_initialized(self):
-        cx_zero = np.isclose(self._calibration_mat1[0][2], 0.0)
-        cy_zero = np.isclose(self._calibration_mat1[1][2], 0.0)
-        initialized = (not cx_zero) and (not cy_zero)
-        return initialized
-
-    # def set_height(self, height):
-    #     self.height = height
-    #
-    # def get_height(self):
-    #     assert self.height > 0     # height not properly initialized
-    #     return self.height
-    #
-    # def set_width(self, width):
-    #     self.width = width
-    #
-    # def get_width(self):
-    #     assert self.width > 0      # width not properly initialized
-    #     return self.width
-
-    @staticmethod
-    def compute_calibration_mat(focal_length, cx, cy):
-        return np.array([[focal_length, 0, cx],
-                        [0, focal_length, cy],
-                        [0, 0, 1]], dtype=float)
-
-    def get_focal_length(self):
-        assert self._calibration_mat1[0][0] == self._calibration_mat1[1][1]
-        return self._calibration_mat1[0][0]
-
-    def get_view_angle(self):
-        assert self.width is not None and self.width > 0
-        assert self.height is not None and self.height > 0
-        min_extend = min(self.width, self.height)
-        angle_of_view = 2 * math.degrees(math.atan((min_extend / float(2.0 * self._calibration_mat1[0][0]))))
-        return angle_of_view
-
-    def get_radial_distortion(self):
-        assert self._radial_distortion is not None
-        return self._radial_distortion
-
-    def has_radial_distortion(self):
-        return self._radial_distortion is not None and self._radial_distortion != 0.0
 
     def get_viewing_dir_world_coord(self):
 
@@ -463,92 +403,159 @@ class Camera(CoordinateFrameSystem):
             rays.append(Ray(pos_vec=ray_pos_vec, dir_vec=ray_dir_vec))
         return rays
 
-    # ============================== Depth Buffer ===============================================================
+    def set_depth_map(self, depth_map_ifp, depth_map_callback, depth_map_semantic):
+        self.depth_map_fp = depth_map_ifp
+        self.depth_map_callback = depth_map_callback
+        self.depth_map_semantic = depth_map_semantic
 
-    def convert_depth_buffer_to_cam_coords(self,
-                                           depth_buffer_matrix,
-                                           depth_scale_value=1.0,
-                                           background_depth_value=1000,
-                                           invert_y=False,
-                                           n_th_result_point=100
-                                           ):
+    def get_depth_map(self):
+        if os.path.isfile(self.depth_map_fp):
+            return self.depth_map_callback(self.depth_map_fp)
+        else:
+            return None
+
+
+    def convert_depth_map_to_world_coords(self,
+                                          depth_map,
+                                          depth_map_semantic,
+                                          shift_to_pixel_center,        # False for Colmap, True for MVE
+                                          depth_map_display_sparsity=100,
+                                          inverted_cam_model=False):
         """
         Do not confuse z_buffer with depth_buffer!
         z_buffer contains values in [0,1]
         depth_buffer contains the actual distance values
 
-        Computes only 1/n_th_result_point points for the point cloud
         :param depth_buffer_matrix:
         :param n_th_result_point:
         :return:
         """
+        logger.info('Converting depth map to world coordinates: ...')
+        cam_coords = self.convert_depth_map_to_cam_coords(
+            depth_map,
+            depth_map_semantic,
+            shift_to_pixel_center,
+            depth_map_display_sparsity,
+            inverted_cam_model=inverted_cam_model)
 
-        logger.info('convert_depth_matrix_to_camera_coords: ...')
+        world_coords = self.cam_to_world_coord_multiple_coords(
+            cam_coords)
 
-        assert self.height is not None
-        assert self.width is not None
+        logger.info('Converting depth map to world coordinates: Done')
+        return world_coords
 
-        depth_buffer_matrix *= depth_scale_value
+    def convert_depth_map_to_cam_coords(self,
+                                        depth_map,
+                                        depth_map_semantic,
+                                        shift_to_pixel_center,  # False for Colmap, True for MVE
+                                        depth_map_display_sparsity=100,
+                                        inverted_cam_model=False):
 
-        focal_length_in_pixel = self.get_calibration_mat()[0][0]
-        logger.vinfo('focal_length_in_pixel', focal_length_in_pixel)
+        assert 0 < depth_map_display_sparsity
 
-        # use the local coordinate system of the camera
-        # to analyze its viewing directions
-        # blender camera coordinate system looks along the negative z axis (blue)
-        # the up axis points along the y axis (green)
+        height, width = depth_map.shape
+        logger.info('height ' + str(height))
+        logger.info('width ' + str(width))
 
-        coords_cam_coord = []
-        result_point_idx = 0
-        num_pixels = self.width * self.height
-        for (y, x), depth_value in np.ndenumerate(depth_buffer_matrix):
+        if self.height == height and self.width == width:
+            x_step_size = 1.0
+            y_step_size = 1.0
+        else:
+            x_step_size = self.width / width
+            y_step_size = self.height / height
+            logger.info('x_step_size ' + str(x_step_size))
+            logger.info('y_step_size ' + str(y_step_size))
 
-            if depth_value < background_depth_value:
+        fx, fy, skew, cx, cy = self.split_intrinsic_mat(self.get_calibration_mat())
+        assert skew != 0
 
-                x = self.width - x  # Invert x
-                x = x - self.width / 2.0  # Shift x from image to camera coordinates
-                if invert_y:
-                    y = self.height - y
-                y = y - self.height / 2.0  # Shift y from image to camera coordinates
-                z = -focal_length_in_pixel  # Invert z
-                pixel_vec = np.array([x, y, z], dtype=float)
+        indices = np.indices((height, width))
+        y_index_list = indices[0].flatten()
+        x_index_list = indices[1].flatten()
 
-                if result_point_idx % 10000 == 0:
-                    logger.info('result_point_idx ' + str(result_point_idx) + ' ' + str(num_pixels))
+        if inverted_cam_model:  # For Blender, VTK, etc
+            # Use the local coordinate system of the camera to analyze its viewing directions
+            # The Blender camera coordinate system looks along the negative z axis (blue),
+            # the up axis points along the y axis (green).
+            y_index_list = y_index_list[::-1]  # Reverse order of indices
+            x_index_list = x_index_list[::-1]  # Reverse order of indices
+            fx = -fx
+            fy = -fy
+            assert False    # TODO Verify this
 
-                if result_point_idx % n_th_result_point == 0:
-                    # convert to inhomogeneous coordinates
-                    # divide using the focal length (in pixels)
-                    # (i.e. the resulting vector is unit free)
-                    pixel_vec /= pixel_vec[2]
-                    # multiply by depth value in blender units / meters
-                    # (i.e. the resulting vector is in blender units / meters)
-                    pixel_vec *= depth_value
-                    coords_cam_coord.append(pixel_vec)
-                result_point_idx += 1
+        depth_values = depth_map.flatten()
 
-        logger.info('convert_depth_matrix_to_camera_coords: Done')
-        return coords_cam_coord
+        assert len(x_index_list) == len(y_index_list) == len(depth_values)
 
-    def convert_depth_buffer_to_world_coords(self,
-                                             depth_buffer_matrix,
-                                             depth_scale_value=1.0,
-                                             background_depth_value=1000,
-                                             invert_y=False,
-                                             n_th_result_point=100
-                                           ):
+        if shift_to_pixel_center:
+            # https://github.com/simonfuhrmann/mve/blob/master/libs/mve/depthmap.cc
+            #  math::Vec3f v = invproj * math::Vec3f(
+            #       (float)x + 0.5f, (float)y + 0.5f, 1.0f);
+            u_index_coord_list = x_step_size * x_index_list + 0.5
+            v_index_coord_list = y_step_size * y_index_list + 0.5
+        else:
+            # https://github.com/colmap/colmap/blob/dev/src/base/reconstruction.cc
+            #   // COLMAP assumes that the upper left pixel center is (0.5, 0.5)
+            # i.e. pixels are already shifted
+            u_index_coord_list = x_step_size * x_index_list
+            v_index_coord_list = y_step_size * y_index_list
 
-        coords_cam_coord = self.convert_depth_buffer_to_cam_coords(
-            depth_buffer_matrix=depth_buffer_matrix,
-            depth_scale_value=depth_scale_value,
-            background_depth_value=background_depth_value,
-            invert_y=invert_y,
-            n_th_result_point=n_th_result_point
-        )
+        # The cannoncial vectors are defined according to p.155 of
+        # "Multiple View Geometry" by Hartley and Zisserman using a canonical
+        # focal length of 1 , i.e. vec = [(x - cx) / fx, (y - cy) / fy, 1]
+        x_coords_canonical = (u_index_coord_list - cx) / fx + (cy - v_index_coord_list) * skew / (fx * fy)
+        y_coords_canonical = (v_index_coord_list - cy) / fy
+        z_coords_canonical = np.ones(len(depth_values), dtype=float)
 
-        coords_world_coord = self.cam_to_world_coord_multiple_coords(
-            coords_cam_coord)
-        return coords_world_coord
+        # Determine non-background data
+        # non_background_flags = np.logical_not(np.isnan(depth_values))
+        depth_values_not_nan = np.nan_to_num(depth_values)
+        non_background_flags = depth_values_not_nan > 0
+
+        x_coords_canonical_filtered = x_coords_canonical[non_background_flags]
+        y_coords_canonical_filtered = y_coords_canonical[non_background_flags]
+        z_coords_canonical_filtered = z_coords_canonical[non_background_flags]
+        depth_values_filtered = depth_values[non_background_flags]
+
+        if depth_map_display_sparsity != 100:
+            x_coords_canonical_filtered = x_coords_canonical_filtered[::depth_map_display_sparsity]
+            y_coords_canonical_filtered = y_coords_canonical_filtered[::depth_map_display_sparsity]
+            z_coords_canonical_filtered = z_coords_canonical_filtered[::depth_map_display_sparsity]
+            depth_values_filtered = depth_values_filtered[::depth_map_display_sparsity]
+
+        if depth_map_semantic == Camera.DEPTH_MAP_WRT_CANONICAL_VECTORS:
+            # In this case, the depth values are defined w.r.t. the canonical
+            # vectors. This kind of depth data is used by Colmap.
+            x_coords_filtered = x_coords_canonical_filtered * depth_values_filtered
+            y_coords_filtered = y_coords_canonical_filtered * depth_values_filtered
+            z_coords_filtered = z_coords_canonical_filtered * depth_values_filtered
+
+        elif depth_map_semantic == Camera.DEPTH_MAP_WRT_UNIT_VECTORS:
+            # In this case the depth values are defined w.r.t. the normalized
+            # canonical vectors. This kind of depth data is used by MVE.
+            cannonical_norms_filtered = np.linalg.norm(
+                np.array(
+                    [x_coords_canonical_filtered,
+                     y_coords_canonical_filtered,
+                     z_coords_canonical_filtered],
+                    dtype=float),
+                axis=0)
+            # Instead of normalizing the x,y and z component, we divide the
+            # depth values by the corresponding norm.
+            normalized_depth_values_filtered = depth_values_filtered / cannonical_norms_filtered
+            x_coords_filtered = x_coords_canonical_filtered * normalized_depth_values_filtered
+            y_coords_filtered = y_coords_canonical_filtered * normalized_depth_values_filtered
+            z_coords_filtered = z_coords_canonical_filtered * normalized_depth_values_filtered
+
+        else:
+            assert False
+
+        cam_coords = np.dstack(
+            (x_coords_filtered,
+             y_coords_filtered,
+             z_coords_filtered))[0]
+
+        return cam_coords
 
     @staticmethod
     def parse_camera_image_files(cameras, path_to_images):
@@ -567,10 +574,94 @@ class Camera(CoordinateFrameSystem):
             camera.height, camera.width = seg.shape
         return cameras
 
+    # ============================== Depth Buffer Legacy =============================================================
+
+    # def convert_depth_buffer_to_cam_coords_legazy(self,
+    #                                               depth_buffer_matrix,
+    #                                               depth_scale_value=1.0,
+    #                                               background_depth_value=1000,
+    #                                               invert_y=False,
+    #                                               n_th_result_point=100
+    #                                               ):
+    #     """
+    #     Do not confuse z_buffer with depth_buffer!
+    #     z_buffer contains values in [0,1]
+    #     depth_buffer contains the actual distance values
+    #
+    #     Computes only 1/n_th_result_point points for the point cloud
+    #     :param depth_buffer_matrix:
+    #     :param n_th_result_point:
+    #     :return:
+    #     """
+    #
+    #     logger.info('convert_depth_matrix_to_camera_coords: ...')
+    #
+    #     assert self.height is not None
+    #     assert self.width is not None
+    #
+    #     depth_buffer_matrix *= depth_scale_value
+    #
+    #     fx = self.get_calibration_mat()[0][0]
+    #     logger.vinfo('focal_length_in_pixel', fx)
+    #
+    #     # use the local coordinate system of the camera
+    #     # to analyze its viewing directions
+    #     # blender camera coordinate system looks along the negative z axis (blue)
+    #     # the up axis points along the y axis (green)
+    #
+    #     coords_cam_coord = []
+    #     result_point_idx = 0
+    #     num_pixels = self.width * self.height
+    #     for (y, x), depth_value in np.ndenumerate(depth_buffer_matrix):
+    #
+    #         if depth_value < background_depth_value:
+    #             if result_point_idx % n_th_result_point == 0:
+    #                 if result_point_idx % 10000 == 0:
+    #                     logger.info('result_point_idx ' + str(result_point_idx) + ' ' + str(num_pixels))
+    #
+    #                 cx, cy = self.get_principal_point()
+    #
+    #                 x = self.width - x  # Invert x
+    #                 if invert_y:
+    #                     y = self.height - y
+    #
+    #                 x = x - cx  # Shift x from image to camera coordinates
+    #                 y = y - cy  # Shift y from image to camera coordinates
+    #                 z = -fx  # Invert z
+    #                 pixel_vec = np.array([x, y, z], dtype=float)
+    #
+    #                 # convert to inhomogeneous coordinates
+    #                 # divide using the focal length (in pixels)
+    #                 # (i.e. the resulting vector is unit free)
+    #                 pixel_vec /= pixel_vec[2]
+    #                 # multiply by depth value in blender units / meters
+    #                 # (i.e. the resulting vector is in blender units / meters)
+    #                 pixel_vec *= depth_value
+    #                 coords_cam_coord.append(pixel_vec)
+    #             result_point_idx += 1
+    #
+    #     logger.info('convert_depth_matrix_to_camera_coords: Done')
+    #     return coords_cam_coord
 
 
-
-
-
+    # def convert_depth_buffer_to_world_coords_legazy(self,
+    #                                                 depth_buffer_matrix,
+    #                                                 depth_scale_value=1.0,
+    #                                                 background_depth_value=1000,
+    #                                                 invert_y=False,
+    #                                                 n_th_result_point=100
+    #                                                 ):
+    #
+    #     coords_cam_coord = self.convert_depth_buffer_to_cam_coords_legazy(
+    #         depth_buffer_matrix=depth_buffer_matrix,
+    #         depth_scale_value=depth_scale_value,
+    #         background_depth_value=background_depth_value,
+    #         invert_y=invert_y,
+    #         n_th_result_point=n_th_result_point
+    #     )
+    #
+    #     coords_world_coord = self.cam_to_world_coord_multiple_coords(
+    #         coords_cam_coord)
+    #     return coords_world_coord
 
 

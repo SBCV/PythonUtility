@@ -2,7 +2,7 @@ import numpy as np
 from Utility.Classes.Frozen_Class import FrozenClass
 from Utility.Math.Conversion import Conversion_Collection
 
-class CoordinateFrameSystem(FrozenClass):
+class Extrinsics(FrozenClass):
 
     def __init__(self):
 
@@ -18,6 +18,17 @@ class CoordinateFrameSystem(FrozenClass):
         self._rotation_mat = np.zeros((3, 3), dtype=float)
 
         self._scale = 1.0
+
+    @staticmethod
+    def invert_transformation_mat(trans_mat):
+        # Exploit that the inverse of the rotation part is equal to the transposed of the rotation part
+        # This should be more robust than trans_mat_inv = np.linalg.inv(trans_mat)
+        trans_mat_inv = np.zeros_like(trans_mat)
+        rotation_part_inv = trans_mat[0:3, 0:3].T
+        trans_mat_inv[0:3, 0:3] = rotation_part_inv
+        trans_mat_inv[0:3, 3] = - np.dot(rotation_part_inv, trans_mat[0:3, 3])
+        trans_mat_inv[3, 3] = 1
+        return trans_mat_inv
 
     def set_scale(self, scale):
         self._scale = scale
@@ -116,11 +127,10 @@ class CoordinateFrameSystem(FrozenClass):
         rotation_part = cam_to_world_mat[0:3, 0:3]
         translation_part = cam_to_world_mat[0:3, 3]
 
-        # TODO Proper HAndling of scale
+        # TODO Proper Hadling of scale
         # TODO APPLY SCALE ALSO TO TRANSLATION?
         #scale = TransformationCollection.transformation_matrix_to_scale(cam_to_world_mat)
         #rotation_part /= scale
-
 
         self.set_rotation_mat(rotation_part.transpose())
         self.set_camera_center_after_rotation(translation_part)
@@ -165,22 +175,33 @@ class CoordinateFrameSystem(FrozenClass):
         return cam_coords
 
     def world_to_cam_coord_single_coord(self, world_coord):
+        """
+        This matrix can be used to convert points given in world coordinates into points given in camera coordinates
+        M = [R      -Rc]
+            [0      1],
+        """
         cam_coord = self.get_rotation_mat().dot(world_coord - self.get_camera_center())
         return cam_coord
 
     def cam_to_world_coord_multiple_coords(self, cam_coords):
-        world_coords = []
-        for cam_coord in cam_coords:
-            world_coord = self.cam_to_world_coord_single_coord(cam_coord)
-            world_coords.append(world_coord)
+
+        num_coords = cam_coords.shape[0]
+        hom_entries = np.ones(num_coords).reshape((num_coords, 1))
+        cam_coords_hom = np.hstack((cam_coords, hom_entries))
+        world_coords_hom = self.get_4x4_cam_to_world_mat().dot(cam_coords_hom.T).T
+        world_coords = np.delete(world_coords_hom, 3, 1)
         return world_coords
 
     def cam_to_world_coord_single_coord(self, cam_coord):
 
-        # my_array.T returns the transpose and does not change my_array
+        """
+       This matrix can be used to convert points given in camera coordinates into points given in world coordinates
+       M = [R^T    c]
+           [0      1]
 
+       https://en.wikipedia.org/wiki/Transformation_matrix#/media/File:2D_affine_transformation_matrix.svg
+       """
         rotation_transposed = np.transpose(self.get_rotation_mat())
-        # transform the vector (without translation) and adding translation
         world_coord = rotation_transposed.dot(cam_coord.T) + self.get_camera_center()
         return world_coord
 

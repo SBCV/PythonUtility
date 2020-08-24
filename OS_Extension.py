@@ -27,6 +27,15 @@ def natural_key(some_string):
     return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', some_string)]
 
 
+def check_ext(ext):
+    # Check if extension is valid (contains a leading dot)
+    if isinstance(ext, list):
+        for ele in ext:
+            assert ele[0] == ".", "Invalid extension, leading dot missing"
+    else:
+        assert ext[0] == ".", "Invalid extension, leading dot missing"
+
+
 def get_file_paths_in_dir(idp,
                           ext=None,
                           target_str_or_list=None,
@@ -51,8 +60,12 @@ def get_file_paths_in_dir(idp,
 
     if ext is not None:
         if isinstance(ext, list):
+            ext = [ele.lower() for ele in ext]
+            check_ext(ext)
             ifp_s = [ifp for ifp in ifp_s if os.path.splitext(ifp)[1].lower() in ext]
         else:
+            ext = ext.lower()
+            check_ext(ext)
             ifp_s = [ifp for ifp in ifp_s if os.path.splitext(ifp)[1].lower() == ext]
 
     if target_str_or_list is not None:
@@ -96,6 +109,26 @@ def get_image_file_paths_in_dir(idp,
         without_ext=without_ext,
         sort_result=sort_result,
         recursive=recursive)
+
+
+def get_corresponding_files_in_directories(idp_1, idp_2, ext_1=None, suffix_2='', get_correspondence_callback=None):
+
+    if get_correspondence_callback is None:
+        def get_correspondence_callback(fn_1):
+            return fn_1 + suffix_2
+
+    potential_fn_1_list = get_file_paths_in_dir(
+        idp_1, ext=ext_1, base_name_only=True)
+    fp_1_list = []
+    fp_2_list = []
+    for fn_1 in potential_fn_1_list:
+        fp_2 = os.path.join(idp_2, get_correspondence_callback(fn_1))
+        #print(fp_2)
+        if os.path.isfile(fp_2):
+            fp_1_list.append(os.path.join(idp_1, fn_1))
+            fp_2_list.append(fp_2)
+    return fp_1_list, fp_2_list
+
 
 def delete_subdirs(idp, filter_dp, recursive=False, dry_run=True):
 
@@ -223,3 +256,11 @@ def is_subdir(possible_parent_dir, possible_sub_dir):
 
 def exist_files(file_list):
     return all(map(os.path.isfile, file_list))
+
+
+def are_dirs_equal(idp_1, idp_2):
+    fp_1_list = get_file_paths_in_dir(idp_1, base_name_only=True)
+    fp_2_list = get_file_paths_in_dir(idp_2, base_name_only=True)
+
+    return fp_1_list == fp_2_list
+

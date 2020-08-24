@@ -1,4 +1,4 @@
-class TXTFileHandler():
+class TXTFileHandler(object):
 
     @staticmethod
     def read_lines(ifp):
