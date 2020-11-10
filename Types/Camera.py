@@ -467,7 +467,7 @@ class Camera(Extrinsics, Intrinsics):
             logger.info('y_step_size ' + str(y_step_size))
 
         fx, fy, skew, cx, cy = self.split_intrinsic_mat(self.get_calibration_mat())
-        assert skew != 0
+        logger.vinfo('fx, fy, skew, cx, cy: ', str([fx, fy, skew, cx, cy]))
 
         indices = np.indices((height, width))
         y_index_list = indices[0].flatten()

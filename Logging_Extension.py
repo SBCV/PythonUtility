@@ -41,26 +41,30 @@ standard_logger = standard_logging.getLogger()
 
 class CustomLogger(object):
 
-    def info(self, param):
-        standard_logger.info(param)
+    def info(self, param, log=True):
+        if log:
+            standard_logger.info(param)
 
-    def debug(self, param):
-        standard_logger.debug(param)
+    def debug(self, param, log=True):
+        if log:
+            standard_logger.debug(param)
 
-    def warning(self, param):
-        standard_logger.warning(param)
+    def warning(self, param, log=True):
+        if log:
+            standard_logger.warning(param)
 
     # Add a method to the logger object (not to the class definition) during runtime x
-    def vinfo(self, some_str, some_var):
-        assert type(some_str) is str
+    def vinfo(self, some_str, some_var, log=True):
+        if log:
+            assert type(some_str) is str
 
-        """
-        Prints a variable info
-        :return:
-        """
-        if some_var is None:
-            some_var = 'None'
-        standard_logger.info(some_str + ': ' + str(some_var))
+            """
+            Prints a variable info
+            :return:
+            """
+            if some_var is None:
+                some_var = 'None'
+            standard_logger.info(some_str + ': ' + str(some_var))
 
     def pinfo(self, current, total):
         # Progress info
